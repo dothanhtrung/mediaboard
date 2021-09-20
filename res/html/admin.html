@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Media Board - Admin</title>
+
+    <link rel="stylesheet" type="text/css" href="/css/common.css">
+    <script type="text/javascript" src="/js/jquery-3.6.0.min.js" charset="utf-8"></script>
+    <script type="text/javascript" src="/js/common.js"></script>
+</head>
+<body>
+
+{% include "header.html" %}
+
+<form action="/admin/reload/" method="get">
+    <input type="submit" value="Reload all">
+</form>
+
+</body>
+</html>

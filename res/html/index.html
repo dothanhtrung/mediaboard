@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Media Board</title>
+
+    <link rel="stylesheet" type="text/css" href="/css/common.css">
+    <script type="text/javascript" src="/js/jquery-3.6.0.min.js" charset="utf-8"></script>
+    <script type="text/javascript" src="/js/common.js"></script>
+</head>
+<body>
+
+
+{% include "header.html" %}
+<div class="page-container">
+    <div class="sidenav">
+        {% for tag in tags %}
+        <a href="?tags={{tag}}">{{tag}}</a>
+        {% endfor %}
+    </div>
+
+    <div class="main">
+        {% include "paging.html" %}
+
+
+        <div {% if view != "series" %}class="post-container" {% endif %}>
+
+            {% for item in items %}
+            {% if item.file_type != "text" %}
+            <div class="post post-item" id="dir_{{loop.index}}" tabindex="{{loop.index}}">
+                <a href="/?id={{item.id}}">
+                    {% if item.file_type == "image" %}
+                    <img class="item" src="/img/{{item.path}}" width="100%">
+                    {% elif item.file_type == "video" %}
+                    <video class="item" width="100%" muted>
+                        <source src="/img/{{item.path}}">
+                    </video>
+                    {% elif item.file_type == "video/short" %}
+                    <video class="item" width="100%" muted loop>
+                        <source src="/img/{{item.path}}">
+                    </video>
+                    {% elif item.file_type == "folder" %}
+                    <img class="item" src="/img/{{item.cover}}" width="100%">
+                    {% endif %}
+                    {{item.name}}
+                </a>
+            </div>
+            {% endif %}
+            {% endfor %}
+        </div>
+
+        {% include "paging.html" %}
+        <br>
+        {% if item_id > 0 %}
+        {% include "edit.html" %}
+        {% endif %}
+    </div>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Media Board - Upload</title>
+
+  <link rel="stylesheet" type="text/css" href="/css/common.css">
+</head>
+<body>
+
+{% include "header.html" %}
+
+{% if post_upload %}
+  {% if file_type == "image" %}
+  <img class="item" src="/img/tmp/{{real_file_name}}" width="50%">
+  {% elif file_type == "video" %}
+  <video class="item" muted controls width="50%">
+    <source src="/img/tmp/{{real_file_name}}">
+  </video>
+  {% endif %}
+
+<form action="/post_upload/" method="post">
+  <label>
+    Name
+    <input type="text" name="name" value="{{file_name}}">
+  </label><br>
+  <label>
+    Parent
+    <input type="text" name="parent">
+  </label><br>
+  <label>
+    Tags
+    <textarea name="tags"></textarea>
+  </label><br>
+  <input type="hidden" name="real_name" value="{{real_file_name}}">
+  <input type="hidden" name="md5" value="{{md5}}">
+  <input type="submit" value="Add">
+</form>
+{% else %}
+<form action="/upload/" method="post" enctype="multipart/form-data">
+  <input type="file" name="file"><br>
+  <input type="submit" value="Upload">
+</form>
+{% endif %}
+
+</body>
+</html>
