@@ -208,14 +208,18 @@ pub async fn delete_item(conn: &Connection, id: i64, root_dir: &String) {
 
     let items = find_items(conn, &format!("SELECT * FROM item WHERE parent = {}", id)).unwrap();
     for item in items {
-        let file_path = format!("{}{}", root_dir, item.path);
+        let file_path = format!("{}/{}", root_dir, item.path);
+        let thumbnail_path = format!("{}/thumbnail/{}.jpg", root_dir, item.path);
         delete_local_file(&file_path).await;
+        delete_local_file(&thumbnail_path).await;
     }
     conn.execute("DELETE FROM item WHERE parent = ?1", params![id]);
 
     if let Ok(item) = find_item(conn, &format!("id = {}", id)) {
-        let file_path = format!("{}{}", root_dir, item.path);
+        let file_path = format!("{}/{}", root_dir, item.path);
+        let thumbnail_path = format!("{}/thumbnail/{}.jpg", root_dir, item.path);
         delete_local_file(&file_path).await;
+        delete_local_file(&thumbnail_path).await;
         conn.execute("DELETE FROM item WHERE id = ?1", params![id]);
     }
 }

@@ -29,18 +29,20 @@
             {% if item.file_type != "text" %}
             <div class="post post-item" id="dir_{{loop.index}}" tabindex="{{loop.index}}">
                 <a href="/?id={{item.id}}">
-                    {% if item.file_type == "image" %}
-                    <img class="item" src="/img/{{item.path}}" width="100%">
-                    {% elif item.file_type == "video" %}
-                    <video class="item" width="100%" muted>
-                        <source src="/img/{{item.path}}">
-                    </video>
-                    {% elif item.file_type == "video/short" %}
-                    <video class="item" width="100%" muted loop>
-                        <source src="/img/{{item.path}}">
-                    </video>
-                    {% elif item.file_type == "folder" %}
-                    <img class="item" src="/img/{{item.cover}}" width="100%">
+                    {% if item.file_type != "folder" %}
+                        {% if view == "series" %}
+                            {% if item.file_type == "image" %}
+                                <img class="item" src="/img/{{item.path}}" width="100%">
+                            {% else %}
+                                <video class="item" muted controls loop>
+                                    <source src="/img/{{item.path}}">
+                                </video>
+                            {% endif %}
+                        {% else %}
+                            <img class="item {{item.file_type}}" src="/img/thumbnail/{{item.path}}.jpg" width="100%">
+                        {% endif %}
+                    {% else %}
+                        <img class="item folder" src="/img/thumbnail/{{item.path}}.jpg" width="100%">
                     {% endif %}
                     {{item.name}}
                 </a>

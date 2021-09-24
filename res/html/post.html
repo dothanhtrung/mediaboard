@@ -24,7 +24,7 @@
             {% if item.file_type == "image" %}
             <img class="item" src="/img/{{item.path}}">
             {% elif item.file_type == "video" %}
-            <video class="item" muted controls>
+            <video class="item" muted controls loop>
                 <source src="/img/{{item.path}}">
             </video>
             {% elif item.file_type == "video/short" %}

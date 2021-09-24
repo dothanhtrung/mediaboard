@@ -5,6 +5,7 @@ mod db;
 use std::fs::{create_dir_all, rename, File};
 use std::io;
 use std::path::Path;
+use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use actix_files::Files;
@@ -23,6 +24,7 @@ struct AppState {
     conn: Connection,
     ipp: u64,
     root_dir: String,
+    thumbnail_dir: String,
 }
 
 #[derive(Deserialize)]
@@ -243,12 +245,17 @@ async fn admin(tmpl: web::Data<tera::Tera>) -> impl Responder {
 async fn reload(data: web::Data<AppState>) -> impl Responder {
     for entry in WalkDir::new(&data.root_dir).into_iter().filter_map(|e| e.ok()) {
         let file_path = entry.path().to_str().unwrap();
+        if entry.path().starts_with(Path::new(&data.thumbnail_dir)) {
+            continue;
+        }
         let rel_path = file_path.replacen(&data.root_dir, "", 1);
         if rel_path == "" {
             continue;
         }
         let file_name = entry.file_name().to_str().unwrap();
         let mut file_type = if entry.path().is_dir() { "folder" } else { guess_file_type(file_name) };
+
+        create_thumbnail(&data.root_dir, &data.thumbnail_dir, file_path, file_type);
 
         if file_type == "video" {
             if entry.metadata().unwrap().len() < 5242880 {
@@ -274,7 +281,6 @@ async fn reload(data: web::Data<AppState>) -> impl Responder {
             let mut md5 = Md5::new();
             if file_type == "folder" {
                 md5.update(item.path.as_str());
-
             } else {
                 if let Ok(mut file) = File::open(&file_path) {
                     io::copy(&mut file, &mut md5);
@@ -331,7 +337,7 @@ async fn upload(tmpl: web::Data<tera::Tera>, query: web::Query<QueryInfo>) -> im
 #[post("/upload/")]
 async fn upload_item(data: web::Data<AppState>, mut payload: Multipart) -> impl Responder {
     let tmp_dir_path = Path::new(&data.root_dir).join("tmp");
-    if !tmp_dir_path.exists() && !tmp_dir_path.is_dir() {
+    if !tmp_dir_path.exists() {
         if let Err(_) = create_dir_all(&tmp_dir_path) {
             HttpResponse::Found().header("Location", "/").finish();
         };
@@ -414,6 +420,8 @@ async fn post_upload(data: web::Data<AppState>, form: web::Form<PostData>) -> im
                         eprintln!("Failed to update tag. {}", err);
                     }
                 }
+
+                create_thumbnail(&data.root_dir, &data.thumbnail_dir, &dest_file, &item.file_type);
                 return HttpResponse::Found().header("Location", format!("/?id={}", id)).finish();
             }
         }
@@ -422,14 +430,34 @@ async fn post_upload(data: web::Data<AppState>, form: web::Form<PostData>) -> im
     HttpResponse::Found().header("Location", "/upload/").finish()
 }
 
+fn create_thumbnail(root_dir: &str, thumbnail_dir: &str, file_path: &str, file_type: &str) {
+    let thumb_path = format!("{}.jpg", file_path.replacen(root_dir, &format!("{}/", thumbnail_dir), 1));
+    let thumb_file = Path::new(&thumb_path);
+    if !thumb_file.exists() {
+        let thumb_file_parrent = thumb_file.parent().unwrap();
+        if !thumb_file_parrent.exists() {
+            if let Err(_) = create_dir_all(&thumb_file_parrent) {
+                HttpResponse::Found().header("Location", "/").finish();
+            };
+        }
+
+        if file_type == "image" {
+            Command::new("convert").args(["-quiet", "-thumbnail", "300", &format!("{}[0]", file_path), &thumb_path]).status().expect("Failed to create thumbnail");
+        } else if file_type == "video" {
+            Command::new("ffmpeg").args(["-y", "-loglevel", "quiet", "-i", file_path, "-frames", "15", "-vf", r#"select=not(mod(n\,3000)),scale=300:ih*300/iw"#, "-q:v", "10", &thumb_path]).status().expect("Failed to create thumbnail");
+        }
+    }
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let mut config = Ini::new();
     let _ = config.load("config.ini");
     let root_dir = config.get("default", "root").unwrap();
+    let thumbnail_dir = String::from(Path::new(&root_dir).join("thumbnail").to_str().unwrap());
     let db_path = config.get("default", "db").unwrap();
     let port = config.get("default", "port").unwrap();
-    let ipp: u64 = config.get("default", "ipp").unwrap_or("20".to_owned()).parse().unwrap();
+    let ipp: u64 = config.get("default", "ipp").unwrap_or("48".to_owned()).parse().unwrap();
 
     HttpServer::new(move || {
         let tera = Tera::new(concat!(env!("CARGO_MANIFEST_DIR"), "/res/html/**/*")).unwrap();
@@ -440,6 +468,7 @@ async fn main() -> std::io::Result<()> {
                 conn: Connection::open(&db_path).unwrap(),
                 ipp,
                 root_dir: root_dir.clone(),
+                thumbnail_dir: thumbnail_dir.clone(),
             })
             .service(index)
             .service(admin)
