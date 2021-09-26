@@ -2,7 +2,10 @@
   <form action="/" method="post">
     Name: <br>
     <input type="text" name="name" value="{{item.name}}"><br><br>
-
+    <label>
+      Album
+      <input type="text" name="parent" value="{{item.parent}}">
+    </label><br>
     Tags: <br>
     <textarea name="tags">{% for tag in tags %}{{tag}} {% endfor %}</textarea><br>
     <input type="hidden" name="id" value="{{item.id}}">

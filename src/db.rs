@@ -182,22 +182,22 @@ pub async fn update_item_tag(conn: &Connection, item_id: i64, tag_names: Vec<&st
     Ok(())
 }
 
-pub async fn update_item(conn: &Connection, id: i64, name: String) {
-    if let Err(err) = conn.execute("UPDATE item SET name=?1 WHERE id = ?2", params![name, id]) {
+pub async fn update_item(conn: &Connection, id: i64, name: &str, parent: &str) {
+    if let Err(err) = conn.execute("UPDATE item SET name=?1, parent=?2 WHERE id = ?3", params![name, parent, id]) {
         eprintln!("Failed to upate item. {}", err);
     }
 }
 
 async fn delete_local_file(file_path: &str) {
     let path = Path::new(&file_path);
-    if path.is_dir() {
-        remove_dir_all(path);
-    } else {
+    if !path.is_dir() {
+    //     remove_dir_all(path);
+    // } else {
         remove_file(path);
     }
 }
 
-pub async fn delete_item(conn: &Connection, id: i64, root_dir: &String) {
+pub async fn delete_item(conn: &Connection, id: i64, root_dir: &str) {
     // let trash_dir = format!("{}/trash", root_dir);
     // let trash_dir_path = Path::new(&trash_dir);
     // if !trash_dir_path.exists() && !trash_dir_path.is_dir() {
@@ -208,10 +208,7 @@ pub async fn delete_item(conn: &Connection, id: i64, root_dir: &String) {
 
     let items = find_items(conn, &format!("SELECT * FROM item WHERE parent = {}", id)).unwrap();
     for item in items {
-        let file_path = format!("{}/{}", root_dir, item.path);
-        let thumbnail_path = format!("{}/thumbnail/{}.jpg", root_dir, item.path);
-        delete_local_file(&file_path).await;
-        delete_local_file(&thumbnail_path).await;
+        delete_item(conn, item.id, root_dir);
     }
     conn.execute("DELETE FROM item WHERE parent = ?1", params![id]);
 

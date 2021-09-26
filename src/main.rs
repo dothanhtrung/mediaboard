@@ -213,14 +213,9 @@ async fn item_update(data: web::Data<AppState>, postdata: web::Form<PostData>) -
             }
         }
 
-        let mut name = String::new();
-        if let Some(_name) = &postdata.name {
-            name = _name.clone();
-        }
-
-        if !&name.is_empty() {
-            update_item(&data.conn, item_id, name).await;
-        }
+        let mut name = postdata.name.as_ref().unwrap();
+        let mut parent = postdata.parent.as_ref().unwrap();
+        update_item(&data.conn, item_id, name, parent).await;
 
         return HttpResponse::Found().header("Location", format!("/?id={}", item_id)).finish();
     }
@@ -290,12 +285,8 @@ async fn reload(data: web::Data<AppState>) -> impl Responder {
             match find_item(&data.conn, &format!("md5 = \"{}\"", item.md5)) {
                 Ok(_) => println!("{}: duplicated md5sum {}.", item.path, item.md5),
                 Err(_) => {
-                    if let Ok(id) = insert_item(&data.conn, &item).await {
-                        if file_type == "folder" {
-                            if let Err(err) = update_item_tag(&data.conn, id, vec!("album")).await {
-                                eprintln!("Failed to update tag. {}", err);
-                            }
-                        }
+                    if let Err(err) = insert_item(&data.conn, &item).await {
+                        eprintln!("Failed to insert item. {}", err);
                     }
                 }
             };
@@ -304,12 +295,6 @@ async fn reload(data: web::Data<AppState>) -> impl Responder {
                 data.conn.execute("UPDATE item SET file_type = ?1 WHERE id = ?2",
                                   params![file_type, item.id],
                 ).expect("Update item successfully");
-
-                if file_type == "folder" {
-                    if let Err(err) = update_item_tag(&data.conn, item.id, vec!("album")).await {
-                        eprintln!("Failed to update tag. {}", err);
-                    }
-                }
             }
         }
     }
