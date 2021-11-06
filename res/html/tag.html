@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Media Board - Tag {{tag.name}}</title>
+
+    <link rel="stylesheet" type="text/css" href="/css/common.css">
+</head>
+<body>
+
+<form action="/admin/tag" method="post">
+    <label>Tag
+    <input type="text" value="{{tag.name}}" name="name"></label><br>
+    <label>Tag
+        <textarea name="deps">{% for tag in depends %}{{tag}} {% endfor %}</textarea><br></label><br>
+    <input type="hidden" name="id" value="{{item.id}}">
+    <input type="submit" value="Save">
+</form>
+<a href="/delete/tag/{{tag.id}}" onclick="return confirm('Delete tag {{tag.name}}?')">Delete</a>
+</body>
+</html>

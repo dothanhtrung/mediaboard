@@ -101,6 +101,7 @@ async fn index(tmpl: web::Data<tera::Tera>, data: web::Data<AppState>, query: we
                 view = "series".to_owned();
             }
         }
+        tags.sort_by(|a, b| a.cmp(&b));
         match find_item(&data.conn, &format!("id = {}", id)) {
             Ok(item) => {
                 ctx.insert("item", &item);
@@ -181,6 +182,7 @@ async fn index(tmpl: web::Data<tera::Tera>, data: web::Data<AppState>, query: we
             }
         }
     }
+    tags.sort_by(|a, b| a.cmp(&b));
     ctx.insert("tags", &tags);
 
     if id == 0 {
@@ -233,6 +235,24 @@ async fn delete(data: web::Data<AppState>, web::Path(id): web::Path<i64>) -> imp
 async fn admin(tmpl: web::Data<tera::Tera>) -> impl Responder {
     let ctx = tera::Context::new();
     let template = tmpl.render("admin.html", &ctx).map_err(|_| error::ErrorInternalServerError("Template error")).unwrap();
+    HttpResponse::Ok().content_type("text/html").body(template)
+}
+
+#[get("/admin/tags/")]
+async fn manage_tags(data: web::Data<AppState>, tmpl: web::Data<tera::Tera>) -> impl Responder {
+    let mut ctx = tera::Context::new();
+    if let Ok(mut tags) = find_tags(&data.conn, None).await {
+        tags.sort_by(|a, b| a.name.cmp(&b.name));
+        ctx.insert("tags", &tags);
+    }
+    let template = tmpl.render("tags.html", &ctx).map_err(|_| error::ErrorInternalServerError("Template error")).unwrap();
+    HttpResponse::Ok().content_type("text/html").body(template)
+}
+
+#[get("/admin/tag/{name}")]
+async fn manage_tag(tmpl: web::Data<tera::Tera>) -> impl Responder {
+    let ctx = tera::Context::new();
+    let template = tmpl.render("tag.html", &ctx).map_err(|_| error::ErrorInternalServerError("Template error")).unwrap();
     HttpResponse::Ok().content_type("text/html").body(template)
 }
 
@@ -396,7 +416,7 @@ async fn post_upload(data: web::Data<AppState>, form: web::Form<PostData>) -> im
 
             item.name = file_name.to_string();
             item.path = dest_file.replace(&data.root_dir, "");
-            item.file_type = guess_file_type(file_name).to_string();
+            item.file_type = guess_file_type(real_file_name).to_string();
             item.md5 = form.md5.as_ref().unwrap().clone();
             if let Ok(id) = insert_item(&data.conn, &item).await {
                 if let Some(_tags) = &form.tags {
@@ -457,6 +477,8 @@ async fn main() -> std::io::Result<()> {
             })
             .service(index)
             .service(admin)
+            .service(manage_tags)
+            .service(manage_tag)
             .service(reload)
             .service(item_update)
             .service(delete)

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Media Board - Admin</title>
+    <title>Media Board - Tags</title>
 
     <link rel="stylesheet" type="text/css" href="/css/common.css">
 </head>
@@ -10,11 +10,13 @@
 
 {% include "header.html" %}
 
-<form action="/admin/reload/" method="get">
-    <input type="submit" value="Reload all">
-</form>
-
-<a href="/admin/tags/">Manage tags</a>
+<div class="post-container">
+{% for tag in tags %}
+<div class="post-item">
+<a href="/admin/tag/{{tag.name}}">{{tag.name}}</a>
+</div>
+{% endfor %}
+</div>
 
 </body>
 </html>

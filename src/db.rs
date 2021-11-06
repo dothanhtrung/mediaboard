@@ -83,6 +83,25 @@ pub fn find_items(conn: &Connection, query: &str) -> Result<Vec<Item>> {
     return Ok(items);
 }
 
+pub async fn find_tags(conn: &Connection, cond: Option<&str>) -> Result<Vec<Tag>> {
+    let mut query = String::from("SELECT * FROM tag");
+    if let Some(_cond) = cond {
+        query = format!("{} WHERE {}", query, _cond);
+    }
+    query.push_str("ORDER BY name ASC");
+    println!("{}", query);
+    let mut stmt = conn.prepare(&query)?;
+    let mut rows = stmt.query([])?;
+    let mut tags = Vec::new();
+    while let Some(row) = rows.next()? {
+        tags.push(Tag {
+            id: row.get(0)?,
+            name: row.get(1)?,
+        });
+    }
+    return Ok(tags);
+}
+
 pub fn find_item(conn: &Connection, cond: &str) -> Result<Item> {
     let mut stmt = conn.prepare(&format!("SELECT * FROM item WHERE {}", cond))?;
     stmt.query_row([], |row| {
