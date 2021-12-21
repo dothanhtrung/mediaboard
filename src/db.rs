@@ -88,8 +88,7 @@ pub async fn find_tags(conn: &Connection, cond: Option<&str>) -> Result<Vec<Tag>
     if let Some(_cond) = cond {
         query = format!("{} WHERE {}", query, _cond);
     }
-    query.push_str("ORDER BY name ASC");
-    println!("{}", query);
+    query.push_str(" ORDER BY name ASC");
     let mut stmt = conn.prepare(&query)?;
     let mut rows = stmt.query([])?;
     let mut tags = Vec::new();
@@ -203,7 +202,7 @@ pub async fn update_item_tag(conn: &Connection, item_id: i64, tag_names: Vec<&st
 
 pub async fn update_item(conn: &Connection, id: i64, name: &str, parent: &str) {
     if let Err(err) = conn.execute("UPDATE item SET name=?1, parent=?2 WHERE id = ?3", params![name, parent, id]) {
-        eprintln!("Failed to upate item. {}", err);
+        eprintln!("Failed to update item. {}", err);
     }
 }
 

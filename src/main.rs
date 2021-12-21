@@ -72,7 +72,8 @@ fn guess_file_type(file_name: &str) -> &str {
 #[get("/")]
 async fn index(tmpl: web::Data<tera::Tera>, data: web::Data<AppState>, query: web::Query<QueryInfo>) -> impl Responder {
     let mut ctx = tera::Context::new();
-    let mut tags = Vec::new();
+    let mut page_tags = Vec::new();
+    let mut post_tags = Vec::new();
     let mut cond = Vec::new();
     let mut where_clause = String::new();
     let mut limit_clause = format!("LIMIT {}", data.ipp);
@@ -85,6 +86,16 @@ async fn index(tmpl: web::Data<tera::Tera>, data: web::Data<AppState>, query: we
     let mut select_clause = String::from("item.id, item.name, item.path, item.file_type, item.created_at, item.parent, item.md5");
     let mut having_clause = "".to_owned();
 
+    let folders = find_items(&data.conn, "SELECT * FROM item WHERE file_type = \"folder\"").unwrap_or(vec!());
+    ctx.insert("parents", &folders);
+
+    let mut all_tags :Vec<Tag> = Vec::new();
+    if let Ok(mut tags) = find_tags(&data.conn, None).await {
+        tags.sort_by(|a, b| a.name.cmp(&b.name));
+        all_tags = tags;
+    }
+    ctx.insert("tags", &all_tags);
+
     let mut view = match &query.view {
         Some(v) => {
             old_query.push(format!("view={}", v));
@@ -96,21 +107,23 @@ async fn index(tmpl: web::Data<tera::Tera>, data: web::Data<AppState>, query: we
     if id > 0 {
         old_query.push(format!("id={}", id));
         for tag in find_tags_by_items(&data.conn, vec![id]).unwrap() {
-            tags.push(tag.name.clone());
+            post_tags.push(tag.name.clone());
             if view.is_empty() && tag.name == "series" {
                 view = "series".to_owned();
             }
         }
-        tags.sort_by(|a, b| a.cmp(&b));
+        post_tags.sort_by(|a, b| a.cmp(&b));
+        page_tags = post_tags.clone();
         match find_item(&data.conn, &format!("id = {}", id)) {
             Ok(item) => {
                 ctx.insert("item", &item);
-                ctx.insert("tags", &tags);
+                ctx.insert("page_tags", &page_tags);
+                ctx.insert("post_tags", &post_tags);
 
                 if item.file_type == "folder" {
                     cond.push(format!("item.parent = {}", id));
                     if view == "series" {
-                        order_by = "ORDER BY item.name ASC";
+                        order_by = " ORDER BY item.name ASC";
                     }
                 } else {
                     let template = tmpl.render("post.html", &ctx).map_err(|_| error::ErrorInternalServerError("Template error")).unwrap();
@@ -177,13 +190,13 @@ async fn index(tmpl: web::Data<tera::Tera>, data: web::Data<AppState>, query: we
     }
     if let Ok(_tags) = find_tags_by_items(&data.conn, item_ids) {
         for t in _tags {
-            if !tags.contains(&t.name) {
-                tags.push(t.name);
+            if !page_tags.contains(&t.name) {
+                page_tags.push(t.name);
             }
         }
     }
-    tags.sort_by(|a, b| a.cmp(&b));
-    ctx.insert("tags", &tags);
+    page_tags.sort_by(|a, b| a.cmp(&b));
+    ctx.insert("page_tags", &page_tags);
 
     if id == 0 {
         items.sort_by(|a, b| b.created_at.cmp(&a.created_at));
@@ -323,7 +336,7 @@ async fn reload(data: web::Data<AppState>) -> impl Responder {
 }
 
 #[get("/upload/")]
-async fn upload(tmpl: web::Data<tera::Tera>, query: web::Query<QueryInfo>) -> impl Responder {
+async fn upload(data: web::Data<AppState>, tmpl: web::Data<tera::Tera>, query: web::Query<QueryInfo>) -> impl Responder {
     let mut ctx = tera::Context::new();
     ctx.insert("post_upload", &false);
     ctx.insert("md5", query.md5.as_ref().unwrap_or(&String::new()));
@@ -335,6 +348,17 @@ async fn upload(tmpl: web::Data<tera::Tera>, query: web::Query<QueryInfo>) -> im
             ctx.insert("post_upload", &true);
         }
     }
+
+    let folders = find_items(&data.conn, "SELECT * FROM item WHERE file_type = \"folder\"").unwrap_or(vec!());
+    ctx.insert("parents", &folders);
+
+    let mut all_tags :Vec<Tag> = Vec::new();
+    if let Ok(mut tags) = find_tags(&data.conn, None).await {
+        tags.sort_by(|a, b| a.name.cmp(&b.name));
+        all_tags = tags;
+    }
+    ctx.insert("tags", &all_tags);
+
     let template = tmpl.render("upload.html", &ctx).map_err(|_| error::ErrorInternalServerError("Template error")).unwrap();
     HttpResponse::Ok().content_type("text/html").body(template)
 }
