@@ -278,6 +278,12 @@ pub async fn delete_item(conn: &Connection, id: i64, root_dir: &str) {
     }
 }
 
+pub async fn delete_tag(conn: &Connection, id: i64) {
+    conn.execute("DELETE FROM item_tag WHERE tag = ?1", params![id]);
+    conn.execute("DELETE FROM tag_tag WHERE tag = ?1 OR dep = ?1", params![id]);
+    conn.execute("DELETE FROM tag WHERE id = ?1", params![id]);
+}
+
 pub async fn update_tag(conn: &Connection, id: i64, name: &str, deps: Vec<&str>) -> Result<()> {
     let mut dep_ids = Vec::new();
     for dep in deps {

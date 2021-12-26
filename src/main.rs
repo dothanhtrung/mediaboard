@@ -341,6 +341,12 @@ async fn tag_update(data: web::Data<AppState>, tagdata: web::Form<TagData>) -> i
     return HttpResponse::Found().header("Location", format!("/admin/tag/{}", name)).finish();
 }
 
+#[get("/delete/tag/{id}")]
+async fn tag_delete(data: web::Data<AppState>, web::Path(id): web::Path<i64>) -> impl Responder {
+    delete_tag(&data.conn, id).await;
+    HttpResponse::Found().header("Location", "/admin/tags/").finish()
+}
+
 #[get("/admin/reload/")]
 async fn reload(data: web::Data<AppState>) -> impl Responder {
     for entry in WalkDir::new(&data.root_dir).into_iter().filter_map(|e| e.ok()) {
@@ -557,6 +563,7 @@ async fn main() -> std::io::Result<()> {
             .service(manage_tags)
             .service(manage_tag)
             .service(tag_update)
+            .service(tag_delete)
             .service(reload)
             .service(item_update)
             .service(delete)
