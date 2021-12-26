@@ -185,27 +185,28 @@ pub fn find_tag_by_id(conn: &Connection, id: i64) -> Result<Tag, String> {
 }
 
 pub fn find_depend_tags(conn: &Connection, id: i64) -> Result<Vec<Tag>> {
-        let mut query = format!("SELECT * FROM tag LEFT JOIN tag_tag ON tag.id = tag_tag.dep WHERE tag_tag.tag={}", id);
-        query.push_str(" ORDER BY name ASC");
-        let mut stmt = conn.prepare(&query)?;
-        let mut rows = stmt.query([])?;
-        let mut tags = Vec::new();
-        while let Some(row) = rows.next()? {
-            tags.push(Tag {
-                id: row.get(0)?,
-                name: row.get(1)?,
-            });
-        }
-        return Ok(tags);
+    let mut query = format!("SELECT * FROM tag LEFT JOIN tag_tag ON tag.id = tag_tag.dep WHERE tag_tag.tag={}", id);
+    query.push_str(" ORDER BY name ASC");
+    let mut stmt = conn.prepare(&query)?;
+    let mut rows = stmt.query([])?;
+    let mut tags = Vec::new();
+    while let Some(row) = rows.next()? {
+        tags.push(Tag {
+            id: row.get(0)?,
+            name: row.get(1)?,
+        });
+    }
+    return Ok(tags);
 }
 
 fn update_item_tag(conn: &Connection, item_id: i64, tag_id: i64) -> Result<()> {
-    conn.execute("INSERT INTO item_tag (item, tag) VALUES (?1, ?2)", params![item_id, tag_id]);
-    let mut stmt = conn.prepare("SELECT dep FROM tag_tag WHERE tag=?1").unwrap();
-    let mut rows = stmt.query([tag_id])?;
-    while let Some(row) = rows.next()? {
-        let tag_id = row.get(0)?;
-        update_item_tag(conn, item_id, tag_id);
+    if let Ok(_) = conn.execute("INSERT INTO item_tag (item, tag) VALUES (?1, ?2)", params![item_id, tag_id]) {
+        let mut stmt = conn.prepare("SELECT dep FROM tag_tag WHERE tag=?1").unwrap();
+        let mut rows = stmt.query([tag_id])?;
+        while let Some(row) = rows.next()? {
+            let tag_id = row.get(0)?;
+            update_item_tag(conn, item_id, tag_id);
+        }
     }
     Ok(())
 }
@@ -299,7 +300,7 @@ pub async fn update_tag(conn: &Connection, id: i64, name: &str, deps: Vec<&str>)
     let mut stmt = conn.prepare("SELECT id, dep FROM tag_tag WHERE tag=?1").unwrap();
     let mut rows = stmt.query([id])?;
     while let Some(row) = rows.next()? {
-        let id :i64 = row.get(0)?;
+        let id: i64 = row.get(0)?;
         let dep = row.get(1)?;
         if !dep_ids.contains(&dep) {
             conn.execute("DELETE FROM tag_tag WHERE id=?1", params![id]);

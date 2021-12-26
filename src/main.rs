@@ -329,15 +329,16 @@ async fn tag_update(data: web::Data<AppState>, tagdata: web::Form<TagData>) -> i
     if let Ok(tags) = find_tags(&data.conn, Some(&format!("name = {}", name))).await {
         if (tags[0].id != id) {
             eprintln!("Tag with name {} already exists", name);
+            return HttpResponse::Found().header("Location", format!("/admin/tag/{}", name)).finish();
         }
-    } else {
-        let mut deps: Vec<&str> = Vec::new();
-        if let Some(post_deps) = &tagdata.deps {
-            deps = post_deps.split_whitespace().collect();
-        }
-
-        update_tag(&data.conn, id, &name, deps).await;
     }
+
+    let mut deps: Vec<&str> = Vec::new();
+    if let Some(post_deps) = &tagdata.deps {
+        deps = post_deps.split_whitespace().collect();
+    }
+
+    update_tag(&data.conn, id, &name, deps).await;
     return HttpResponse::Found().header("Location", format!("/admin/tag/{}", name)).finish();
 }
 
