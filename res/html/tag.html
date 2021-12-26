@@ -8,10 +8,12 @@
 </head>
 <body>
 
-<form action="/admin/tag" method="post">
-    <label>Tag
+{% include "header.html" %}
+
+<form action="/admin/tag/" method="post">
+    <label>Name
     <input type="text" value="{{tag.name}}" name="name"></label><br>
-    <label>Tag
+    <label>Depend
         <textarea name="deps">{% for tag in deps %}{{tag.name}} {% endfor %}</textarea><br></label><br>
     <input type="hidden" name="id" value="{{tag.id}}">
     <input type="submit" value="Save">

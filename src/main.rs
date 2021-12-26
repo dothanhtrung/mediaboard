@@ -48,6 +48,14 @@ struct PostData {
     md5: Option<String>,
 }
 
+
+#[derive(Deserialize)]
+struct TagData {
+    id: Option<i64>,
+    name: Option<String>,
+    deps: Option<String>,
+}
+
 #[derive(Serialize)]
 struct Pages {
     cur: u64,
@@ -108,7 +116,7 @@ async fn index(tmpl: web::Data<tera::Tera>, data: web::Data<AppState>, query: we
     let folders = find_items(&data.conn, "SELECT * FROM item WHERE file_type = \"folder\"").unwrap_or(vec!());
     ctx.insert("parents", &folders);
 
-    let mut all_tags :Vec<Tag> = Vec::new();
+    let mut all_tags: Vec<Tag> = Vec::new();
     if let Ok(mut tags) = find_tags(&data.conn, None).await {
         tags.sort_by(|a, b| a.name.cmp(&b.name));
         all_tags = tags;
@@ -243,7 +251,7 @@ async fn item_update(data: web::Data<AppState>, postdata: web::Form<PostData>) -
         if let Ok(item) = find_item(&data.conn, &format!("id = {}", item_id)) {
             if let Some(_tags) = &postdata.tags {
                 let tags: Vec<&str> = _tags.split_whitespace().collect();
-                if let Err(err) = update_item_tag(&data.conn, item_id, tags).await {
+                if let Err(err) = update_item_tags(&data.conn, item_id, tags).await {
                     eprintln!("Failed to update tag. {}", err);
                 }
             }
@@ -312,6 +320,25 @@ async fn manage_tag(data: web::Data<AppState>, web::Path(name): web::Path<String
     ctx.insert("deps", &deps);
     let template = tmpl.render("tag.html", &ctx).map_err(|_| error::ErrorInternalServerError("Template error")).unwrap();
     HttpResponse::Ok().content_type("text/html").body(template)
+}
+
+#[post("/admin/tag/")]
+async fn tag_update(data: web::Data<AppState>, tagdata: web::Form<TagData>) -> impl Responder {
+    let name = tagdata.name.as_ref().unwrap();
+    let id = tagdata.id.unwrap();
+    if let Ok(tags) = find_tags(&data.conn, Some(&format!("name = {}", name))).await {
+        if (tags[0].id != id) {
+            eprintln!("Tag with name {} already exists", name);
+        }
+    } else {
+        let mut deps: Vec<&str> = Vec::new();
+        if let Some(post_deps) = &tagdata.deps {
+            deps = post_deps.split_whitespace().collect();
+        }
+
+        update_tag(&data.conn, id, &name, deps).await;
+    }
+    return HttpResponse::Found().header("Location", format!("/admin/tag/{}", name)).finish();
 }
 
 #[get("/admin/reload/")]
@@ -397,7 +424,7 @@ async fn upload(data: web::Data<AppState>, tmpl: web::Data<tera::Tera>, query: w
     let folders = find_items(&data.conn, "SELECT * FROM item WHERE file_type = \"folder\"").unwrap_or(vec!());
     ctx.insert("parents", &folders);
 
-    let mut all_tags :Vec<Tag> = Vec::new();
+    let mut all_tags: Vec<Tag> = Vec::new();
     if let Ok(mut tags) = find_tags(&data.conn, None).await {
         tags.sort_by(|a, b| a.name.cmp(&b.name));
         all_tags = tags;
@@ -490,7 +517,7 @@ async fn post_upload(data: web::Data<AppState>, form: web::Form<PostData>) -> im
             if let Ok(id) = insert_item(&data.conn, &item).await {
                 if let Some(_tags) = &form.tags {
                     let tags: Vec<&str> = _tags.split_whitespace().collect();
-                    if let Err(err) = update_item_tag(&data.conn, id, tags).await {
+                    if let Err(err) = update_item_tags(&data.conn, id, tags).await {
                         eprintln!("Failed to update tag. {}", err);
                     }
                 }
@@ -529,6 +556,7 @@ async fn main() -> std::io::Result<()> {
             .service(admin)
             .service(manage_tags)
             .service(manage_tag)
+            .service(tag_update)
             .service(reload)
             .service(item_update)
             .service(delete)

@@ -199,7 +199,18 @@ pub fn find_depend_tags(conn: &Connection, id: i64) -> Result<Vec<Tag>> {
         return Ok(tags);
 }
 
-pub async fn update_item_tag(conn: &Connection, item_id: i64, tag_names: Vec<&str>) -> Result<()> {
+fn update_item_tag(conn: &Connection, item_id: i64, tag_id: i64) -> Result<()> {
+    conn.execute("INSERT INTO item_tag (item, tag) VALUES (?1, ?2)", params![item_id, tag_id]);
+    let mut stmt = conn.prepare("SELECT dep FROM tag_tag WHERE tag=?1").unwrap();
+    let mut rows = stmt.query([tag_id])?;
+    while let Some(row) = rows.next()? {
+        let tag_id = row.get(0)?;
+        update_item_tag(conn, item_id, tag_id);
+    }
+    Ok(())
+}
+
+pub async fn update_item_tags(conn: &Connection, item_id: i64, tag_names: Vec<&str>) -> Result<()> {
     let mut tags = Vec::new();
     for tag_name in tag_names {
         if let Ok(tag) = find_tag_or_create(conn, &tag_name.to_lowercase()) {
@@ -221,7 +232,7 @@ pub async fn update_item_tag(conn: &Connection, item_id: i64, tag_names: Vec<&st
 
     for tag in tags {
         if !old_tags.contains(&tag) {
-            conn.execute("INSERT INTO item_tag (item, tag) VALUES (?1, ?2)", params![item_id, tag])?;
+            update_item_tag(conn, item_id, tag);
         }
     }
 
@@ -265,4 +276,44 @@ pub async fn delete_item(conn: &Connection, id: i64, root_dir: &str) {
         delete_local_file(&thumbnail_path).await;
         conn.execute("DELETE FROM item WHERE id = ?1", params![id]);
     }
+}
+
+pub async fn update_tag(conn: &Connection, id: i64, name: &str, deps: Vec<&str>) -> Result<()> {
+    let mut dep_ids = Vec::new();
+    for dep in deps {
+        if dep == name {
+            continue;
+        }
+        if let Ok(tag) = find_tag_or_create(conn, dep) {
+            dep_ids.push(tag.id);
+        }
+    }
+
+    let mut old_deps = Vec::new();
+    let mut stmt = conn.prepare("SELECT id, dep FROM tag_tag WHERE tag=?1").unwrap();
+    let mut rows = stmt.query([id])?;
+    while let Some(row) = rows.next()? {
+        let id :i64 = row.get(0)?;
+        let dep = row.get(1)?;
+        if !dep_ids.contains(&dep) {
+            conn.execute("DELETE FROM tag_tag WHERE id=?1", params![id]);
+        } else {
+            old_deps.push(dep);
+        }
+    }
+
+    if let Err(err) = conn.execute("UPDATE tag SET name=?1 WHERE id = ?2", params![name, id]) {
+        eprintln!("Failed to update tag. {}", err);
+    }
+
+    for dep_id in dep_ids {
+        if !old_deps.contains(&dep_id) {
+            match conn.execute("INSERT INTO tag_tag (tag, dep) VALUES (?1, ?2)", params![id, dep_id]) {
+                Ok(_) => (),
+                Err(err) => eprintln!("Failed to insert tag dependency. {}", err),
+            };
+        }
+    }
+
+    return Ok(());
 }
