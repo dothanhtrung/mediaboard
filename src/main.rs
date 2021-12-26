@@ -240,18 +240,38 @@ async fn index(tmpl: web::Data<tera::Tera>, data: web::Data<AppState>, query: we
 #[post("/")]
 async fn item_update(data: web::Data<AppState>, postdata: web::Form<PostData>) -> impl Responder {
     if let Some(item_id) = postdata.id {
-        if let Some(_tags) = &postdata.tags {
-            let tags: Vec<&str> = _tags.split_whitespace().collect();
-            if let Err(err) = update_item_tag(&data.conn, item_id, tags).await {
-                eprintln!("Failed to update tag. {}", err);
+        if let Ok(item) = find_item(&data.conn, &format!("id = {}", item_id)) {
+            if let Some(_tags) = &postdata.tags {
+                let tags: Vec<&str> = _tags.split_whitespace().collect();
+                if let Err(err) = update_item_tag(&data.conn, item_id, tags).await {
+                    eprintln!("Failed to update tag. {}", err);
+                }
             }
+
+            let mut name = postdata.name.as_ref().unwrap();
+            let mut parent = postdata.parent.as_ref().unwrap();
+
+            if let Ok(new_parent) = find_item(&data.conn, &format!("id = {}", parent)) {
+                let src_file = String::from(Path::new(&data.root_dir).join(item.path).to_str().unwrap());
+                let mut dest_file = String::new();
+                if item.parent > 0 {
+                    let old_parent = find_item(&data.conn, &format!("id = {}", item.parent)).unwrap();
+                    dest_file = src_file.replace(&old_parent.path, &new_parent.path);
+                } else {
+                    dest_file = src_file.replace(&data.root_dir, &format!("{}/{}/", data.root_dir, new_parent.path));
+                }
+
+                if src_file != dest_file {
+                    if let Err(err) = rename(src_file, &dest_file) {
+                        eprintln!("Failed to move item {}. {}", item.id, err);
+                    }
+                }
+
+                update_item(&data.conn, item_id, name, parent).await;
+            }
+
+            return HttpResponse::Found().header("Location", format!("/?id={}", item_id)).finish();
         }
-
-        let mut name = postdata.name.as_ref().unwrap();
-        let mut parent = postdata.parent.as_ref().unwrap();
-        update_item(&data.conn, item_id, name, parent).await;
-
-        return HttpResponse::Found().header("Location", format!("/?id={}", item_id)).finish();
     }
 
     HttpResponse::Found().header("Location", "/").finish()
