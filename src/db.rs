@@ -152,7 +152,7 @@ pub fn find_tags_by_items(conn: &Connection, item_ids: Vec<i64>) -> Result<Vec<T
     Ok(tags)
 }
 
-fn find_tag_or_create(conn: &Connection, name: &str) -> Result<Tag, String> {
+pub fn find_tag_or_create(conn: &Connection, name: &str) -> Result<Tag, String> {
     if name.is_empty() {
         return Err("Empty tag name".to_owned());
     }
@@ -169,6 +169,34 @@ fn find_tag_or_create(conn: &Connection, name: &str) -> Result<Tag, String> {
             Err(err) => return Err(err.to_string()),
         },
     };
+}
+
+pub fn find_tag_by_id(conn: &Connection, id: i64) -> Result<Tag, String> {
+    let mut stmt = conn.prepare("SELECT * FROM tag WHERE id=?1").unwrap();
+    match stmt.query_row([id], |row| {
+        Ok(Tag {
+            id: row.get(0)?,
+            name: row.get(1)?,
+        })
+    }) {
+        Ok(tag) => return Ok(tag),
+        Err(err) => return Err(err.to_string()),
+    };
+}
+
+pub fn find_depend_tags(conn: &Connection, id: i64) -> Result<Vec<Tag>> {
+        let mut query = format!("SELECT * FROM tag LEFT JOIN tag_tag ON tag.id = tag_tag.dep WHERE tag_tag.tag={}", id);
+        query.push_str(" ORDER BY name ASC");
+        let mut stmt = conn.prepare(&query)?;
+        let mut rows = stmt.query([])?;
+        let mut tags = Vec::new();
+        while let Some(row) = rows.next()? {
+            tags.push(Tag {
+                id: row.get(0)?,
+                name: row.get(1)?,
+            });
+        }
+        return Ok(tags);
 }
 
 pub async fn update_item_tag(conn: &Connection, item_id: i64, tag_names: Vec<&str>) -> Result<()> {
@@ -208,9 +236,9 @@ pub async fn update_item(conn: &Connection, id: i64, name: &str, parent: &str) {
 
 async fn delete_local_file(file_path: &str) {
     let path = Path::new(&file_path);
-    if !path.is_dir() {
-    //     remove_dir_all(path);
-    // } else {
+    if path.is_dir() {
+        remove_dir_all(path);
+    } else {
         remove_file(path);
     }
 }

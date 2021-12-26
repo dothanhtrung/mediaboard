@@ -12,8 +12,8 @@
     <label>Tag
     <input type="text" value="{{tag.name}}" name="name"></label><br>
     <label>Tag
-        <textarea name="deps">{% for tag in depends %}{{tag}} {% endfor %}</textarea><br></label><br>
-    <input type="hidden" name="id" value="{{item.id}}">
+        <textarea name="deps">{% for tag in deps %}{{tag.name}} {% endfor %}</textarea><br></label><br>
+    <input type="hidden" name="id" value="{{tag.id}}">
     <input type="submit" value="Save">
 </form>
 <a href="/delete/tag/{{tag.id}}" onclick="return confirm('Delete tag {{tag.name}}?')">Delete</a>

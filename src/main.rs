@@ -69,6 +69,25 @@ fn guess_file_type(file_name: &str) -> &str {
     }
 }
 
+fn create_thumbnail(root_dir: &str, thumbnail_dir: &str, file_path: &str, file_type: &str) {
+    let thumb_path = format!("{}.jpg", file_path.replacen(root_dir, &format!("{}/", thumbnail_dir), 1));
+    let thumb_file = Path::new(&thumb_path);
+    if !thumb_file.exists() {
+        let thumb_file_parrent = thumb_file.parent().unwrap();
+        if !thumb_file_parrent.exists() {
+            if let Err(_) = create_dir_all(&thumb_file_parrent) {
+                HttpResponse::Found().header("Location", "/").finish();
+            };
+        }
+
+        if file_type == "image" {
+            Command::new("convert").args(["-quiet", "-thumbnail", "300", &format!("{}[0]", file_path), &thumb_path]).status().expect("Failed to create thumbnail");
+        } else if file_type == "video" {
+            Command::new("ffmpeg").args(["-y", "-loglevel", "quiet", "-i", file_path, "-frames", "15", "-vf", r#"select=not(mod(n\,3000)),scale=300:ih*300/iw"#, "-q:v", "10", &thumb_path]).status().expect("Failed to create thumbnail");
+        }
+    }
+}
+
 #[get("/")]
 async fn index(tmpl: web::Data<tera::Tera>, data: web::Data<AppState>, query: web::Query<QueryInfo>) -> impl Responder {
     let mut ctx = tera::Context::new();
@@ -263,8 +282,14 @@ async fn manage_tags(data: web::Data<AppState>, tmpl: web::Data<tera::Tera>) -> 
 }
 
 #[get("/admin/tag/{name}")]
-async fn manage_tag(tmpl: web::Data<tera::Tera>) -> impl Responder {
-    let ctx = tera::Context::new();
+async fn manage_tag(data: web::Data<AppState>, web::Path(name): web::Path<String>, tmpl: web::Data<tera::Tera>) -> impl Responder {
+    let mut ctx = tera::Context::new();
+
+    let tag = find_tag_or_create(&data.conn, &name).unwrap();
+    let deps = find_depend_tags(&data.conn, tag.id).unwrap();
+
+    ctx.insert("tag", &tag);
+    ctx.insert("deps", &deps);
     let template = tmpl.render("tag.html", &ctx).map_err(|_| error::ErrorInternalServerError("Template error")).unwrap();
     HttpResponse::Ok().content_type("text/html").body(template)
 }
@@ -457,25 +482,6 @@ async fn post_upload(data: web::Data<AppState>, form: web::Form<PostData>) -> im
     }
 
     HttpResponse::Found().header("Location", "/upload/").finish()
-}
-
-fn create_thumbnail(root_dir: &str, thumbnail_dir: &str, file_path: &str, file_type: &str) {
-    let thumb_path = format!("{}.jpg", file_path.replacen(root_dir, &format!("{}/", thumbnail_dir), 1));
-    let thumb_file = Path::new(&thumb_path);
-    if !thumb_file.exists() {
-        let thumb_file_parrent = thumb_file.parent().unwrap();
-        if !thumb_file_parrent.exists() {
-            if let Err(_) = create_dir_all(&thumb_file_parrent) {
-                HttpResponse::Found().header("Location", "/").finish();
-            };
-        }
-
-        if file_type == "image" {
-            Command::new("convert").args(["-quiet", "-thumbnail", "300", &format!("{}[0]", file_path), &thumb_path]).status().expect("Failed to create thumbnail");
-        } else if file_type == "video" {
-            Command::new("ffmpeg").args(["-y", "-loglevel", "quiet", "-i", file_path, "-frames", "15", "-vf", r#"select=not(mod(n\,3000)),scale=300:ih*300/iw"#, "-q:v", "10", &thumb_path]).status().expect("Failed to create thumbnail");
-        }
-    }
 }
 
 #[actix_web::main]
