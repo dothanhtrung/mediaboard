@@ -14,6 +14,10 @@
     {% include "sidebar.html" %}
 
     <div class="main">
+        {% if item_id > 0 %}
+        <a href="/?id={{item.parent}}">Back to parent</a><br><br>
+        {% endif %}
+
         {% include "paging.html" %}
 
 

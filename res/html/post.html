@@ -14,6 +14,7 @@
     {% include "sidebar.html" %}
 
     <div class="main">
+        <a href="/?id={{item.parent}}">Back to parent</a><br><br>
         <div class="post">
             {% if item.file_type == "image" %}
             <img class="item" src="/img/{{item.path}}">
