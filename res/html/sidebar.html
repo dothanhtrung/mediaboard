@@ -1,0 +1,5 @@
+<div class="sidenav">
+    {% for tag, count in page_tags %}
+    <a href="?tags={{tag}}">{{tag}} <span class="count">{{count}}</span></a>
+    {% endfor %}
+</div>

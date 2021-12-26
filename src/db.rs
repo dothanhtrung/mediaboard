@@ -1,6 +1,7 @@
 use rusqlite::{params, Connection, Result};
 use serde::Serialize;
 
+use std::collections::HashMap;
 use std::fs::{remove_dir_all, remove_file};
 use std::path::Path;
 
@@ -323,4 +324,16 @@ pub async fn update_tag(conn: &Connection, id: i64, name: &str, deps: Vec<&str>)
     }
 
     return Ok(());
+}
+
+pub async fn count_tags(conn: &Connection) -> Result<HashMap<String,u64>> {
+    let mut ret :HashMap<String, u64> = HashMap::new();
+    let mut stmt = conn.prepare("SELECT tag.name, COUNT(item_tag.tag) FROM tag LEFT JOIN item_tag ON tag.id = item_tag.tag GROUP BY item_tag.tag;")?;
+    let mut rows = stmt.query([])?;
+    while let Some(row) = rows.next()? {
+        let tag :String = row.get(0)?;
+        let count :u64 = row.get(1)?;
+        ret.insert(tag, count);
+    }
+    Ok(ret)
 }

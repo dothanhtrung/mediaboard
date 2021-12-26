@@ -11,9 +11,9 @@
 {% include "header.html" %}
 
 <div class="post-container">
-{% for tag in tags %}
+{% for tag, count in tags %}
 <div class="post-item">
-<a href="/admin/tag/{{tag.name}}">{{tag.name}}</a>
+<a href="/admin/tag/{{tag}}">{{tag}} <span class="count">{{count}}</span></a>
 </div>
 {% endfor %}
 </div>

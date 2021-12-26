@@ -2,6 +2,7 @@ use db::*;
 
 mod db;
 
+use std::collections::HashMap;
 use std::fs::{create_dir_all, rename, File};
 use std::io;
 use std::path::Path;
@@ -99,7 +100,7 @@ fn create_thumbnail(root_dir: &str, thumbnail_dir: &str, file_path: &str, file_t
 #[get("/")]
 async fn index(tmpl: web::Data<tera::Tera>, data: web::Data<AppState>, query: web::Query<QueryInfo>) -> impl Responder {
     let mut ctx = tera::Context::new();
-    let mut page_tags = Vec::new();
+    let mut page_tags :HashMap<String, u64> = HashMap::new();
     let mut post_tags = Vec::new();
     let mut cond = Vec::new();
     let mut where_clause = String::new();
@@ -112,6 +113,7 @@ async fn index(tmpl: web::Data<tera::Tera>, data: web::Data<AppState>, query: we
     let mut old_query = Vec::new();
     let mut select_clause = String::from("item.id, item.name, item.path, item.file_type, item.created_at, item.parent, item.md5");
     let mut having_clause = "".to_owned();
+    let tags_count = count_tags(&data.conn).await.unwrap_or_default();
 
     let folders = find_items(&data.conn, "SELECT * FROM item WHERE file_type = \"folder\"").unwrap_or(vec!());
     ctx.insert("parents", &folders);
@@ -140,7 +142,11 @@ async fn index(tmpl: web::Data<tera::Tera>, data: web::Data<AppState>, query: we
             }
         }
         post_tags.sort_by(|a, b| a.cmp(&b));
-        page_tags = post_tags.clone();
+
+        for tag in &post_tags {
+            page_tags.insert(tag.clone(), tags_count[&tag.clone()]);
+        }
+
         match find_item(&data.conn, &format!("id = {}", id)) {
             Ok(item) => {
                 ctx.insert("item", &item);
@@ -217,12 +223,13 @@ async fn index(tmpl: web::Data<tera::Tera>, data: web::Data<AppState>, query: we
     }
     if let Ok(_tags) = find_tags_by_items(&data.conn, item_ids) {
         for t in _tags {
-            if !page_tags.contains(&t.name) {
-                page_tags.push(t.name);
+            let tag_name = t.name.clone();
+            if !page_tags.contains_key(&tag_name) {
+                page_tags.insert(t.name, tags_count[&tag_name]);
             }
         }
     }
-    page_tags.sort_by(|a, b| a.cmp(&b));
+    // page_tags.sort_by(|a, b| a.cmp(&b));
     ctx.insert("page_tags", &page_tags);
 
     if id == 0 {
@@ -256,8 +263,8 @@ async fn item_update(data: web::Data<AppState>, postdata: web::Form<PostData>) -
                 }
             }
 
-            let mut name = postdata.name.as_ref().unwrap();
-            let mut parent = postdata.parent.as_ref().unwrap();
+            let name = postdata.name.as_ref().unwrap();
+            let parent = postdata.parent.as_ref().unwrap();
 
             if let Ok(new_parent) = find_item(&data.conn, &format!("id = {}", parent)) {
                 let src_file = String::from(Path::new(&data.root_dir).join(item.path).to_str().unwrap());
@@ -301,8 +308,8 @@ async fn admin(tmpl: web::Data<tera::Tera>) -> impl Responder {
 #[get("/admin/tags/")]
 async fn manage_tags(data: web::Data<AppState>, tmpl: web::Data<tera::Tera>) -> impl Responder {
     let mut ctx = tera::Context::new();
-    if let Ok(mut tags) = find_tags(&data.conn, None).await {
-        tags.sort_by(|a, b| a.name.cmp(&b.name));
+    if let Ok(mut tags) = count_tags(&data.conn).await {
+        // tags.sort_by(|a, b| a.name.cmp(&b.name));
         ctx.insert("tags", &tags);
     }
     let template = tmpl.render("tags.html", &ctx).map_err(|_| error::ErrorInternalServerError("Template error")).unwrap();
@@ -327,7 +334,7 @@ async fn tag_update(data: web::Data<AppState>, tagdata: web::Form<TagData>) -> i
     let name = tagdata.name.as_ref().unwrap();
     let id = tagdata.id.unwrap();
     if let Ok(tags) = find_tags(&data.conn, Some(&format!("name = {}", name))).await {
-        if (tags[0].id != id) {
+        if tags[0].id != id {
             eprintln!("Tag with name {} already exists", name);
             return HttpResponse::Found().header("Location", format!("/admin/tag/{}", name)).finish();
         }

@@ -140,3 +140,9 @@ body {
 .edit {
     grid-area: footer;
 }
+
+span.count {
+    color: #cccccc;
+    font-style: italic;
+    font-size: 85%;
+}

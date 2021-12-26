@@ -8,14 +8,10 @@
 </head>
 <body>
 
-
 {% include "header.html" %}
+
 <div class="page-container">
-    <div class="sidenav">
-        {% for tag in page_tags %}
-        <a href="?tags={{tag}}">{{tag}}</a>
-        {% endfor %}
-    </div>
+    {% include "sidebar.html" %}
 
     <div class="main">
         {% include "paging.html" %}
