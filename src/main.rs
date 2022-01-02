@@ -100,7 +100,7 @@ fn create_thumbnail(root_dir: &str, thumbnail_dir: &str, file_path: &str, file_t
 #[get("/")]
 async fn index(tmpl: web::Data<tera::Tera>, data: web::Data<AppState>, query: web::Query<QueryInfo>) -> impl Responder {
     let mut ctx = tera::Context::new();
-    let mut page_tags :HashMap<String, u64> = HashMap::new();
+    let mut page_tags: HashMap<String, u64> = HashMap::new();
     let mut post_tags = Vec::new();
     let mut cond = Vec::new();
     let mut where_clause = String::new();
@@ -267,7 +267,7 @@ async fn item_update(data: web::Data<AppState>, postdata: web::Form<PostData>) -
             let parent = postdata.parent.as_ref().unwrap();
 
             if let Ok(new_parent) = find_item(&data.conn, &format!("id = {}", parent)) {
-                let src_file = String::from(Path::new(&data.root_dir).join(item.path).to_str().unwrap());
+                let src_file = format!("{}/{}", &data.root_dir, &item.path);
                 let mut dest_file = String::new();
                 if item.parent > 0 {
                     let old_parent = find_item(&data.conn, &format!("id = {}", item.parent)).unwrap();
@@ -276,13 +276,25 @@ async fn item_update(data: web::Data<AppState>, postdata: web::Form<PostData>) -
                     dest_file = src_file.replace(&data.root_dir, &format!("{}/{}/", data.root_dir, new_parent.path));
                 }
 
+                let mut new_path = item.path.clone();
                 if src_file != dest_file {
                     if let Err(err) = rename(src_file, &dest_file) {
                         eprintln!("Failed to move item {}. {}", item.id, err);
+                    } else {
+                        new_path = dest_file.replace(&data.root_dir, "");
+                        let src_thumb = format!("{}/{}.jpg", &data.thumbnail_dir, item.path);
+                        let dest_thumb = format!("{}/{}.jpg", data.thumbnail_dir, new_path);
+                        let thumb_parent_path = format!("{}/{}", data.thumbnail_dir, new_parent.path);
+                        let thumb_parent = Path::new(&thumb_parent_path);
+                        if !thumb_parent.exists() {
+                            create_dir_all(&thumb_parent);
+                        }
+
+                        rename(src_thumb, dest_thumb);
                     }
                 }
 
-                update_item(&data.conn, item_id, name, parent).await;
+                update_item(&data.conn, item_id, name, parent, &new_path).await;
             }
 
             return HttpResponse::Found().header("Location", format!("/?id={}", item_id)).finish();

@@ -241,8 +241,8 @@ pub async fn update_item_tags(conn: &Connection, item_id: i64, tag_names: Vec<&s
     Ok(())
 }
 
-pub async fn update_item(conn: &Connection, id: i64, name: &str, parent: &str) {
-    if let Err(err) = conn.execute("UPDATE item SET name=?1, parent=?2 WHERE id = ?3", params![name, parent, id]) {
+pub async fn update_item(conn: &Connection, id: i64, name: &str, parent: &str, path: &str) {
+    if let Err(err) = conn.execute("UPDATE item SET name=?1, parent=?2, path=?3 WHERE id = ?4", params![name, parent, path, id]) {
         eprintln!("Failed to update item. {}", err);
     }
 }
