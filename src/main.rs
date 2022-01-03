@@ -3,7 +3,7 @@ use db::*;
 mod db;
 
 use std::collections::HashMap;
-use std::fs::{create_dir_all, rename, File};
+use std::fs::{create_dir_all, rename, File, read_dir};
 use std::io;
 use std::path::Path;
 use std::process::Command;
@@ -78,7 +78,7 @@ fn guess_file_type(file_name: &str) -> &str {
     }
 }
 
-fn create_thumbnail(root_dir: &str, thumbnail_dir: &str, file_path: &str, file_type: &str) {
+fn create_thumbnail(root_dir: &str, thumbnail_dir: &str, file_path: &str, file_type: &str, children: Vec<String>) {
     let thumb_path = format!("{}.jpg", file_path.replacen(root_dir, &format!("{}/", thumbnail_dir), 1));
     let thumb_file = Path::new(&thumb_path);
     if !thumb_file.exists() {
@@ -93,6 +93,18 @@ fn create_thumbnail(root_dir: &str, thumbnail_dir: &str, file_path: &str, file_t
             Command::new("convert").args(["-quiet", "-thumbnail", "300", &format!("{}[0]", file_path), &thumb_path]).status().expect("Failed to create thumbnail");
         } else if file_type == "video" {
             Command::new("ffmpeg").args(["-y", "-loglevel", "quiet", "-i", file_path, "-frames", "15", "-vf", r#"select=not(mod(n\,3000)),scale=300:ih*300/iw"#, "-q:v", "10", &thumb_path]).status().expect("Failed to create thumbnail");
+        } else if file_type == "folder" && children.len() > 0 {
+            let mut args = Vec::new();
+            args.push("-tile");
+            args.push("2x2");
+            args.push("-quality");
+            args.push("-25");
+            for c in children.iter() {
+                args.push(c);
+            }
+            args.push(&thumb_path);
+            Command::new("montage").args(args)
+                .status().expect("Failed to create folder thumbnail");
         }
     }
 }
@@ -381,8 +393,6 @@ async fn reload(data: web::Data<AppState>) -> impl Responder {
         let file_name = entry.file_name().to_str().unwrap();
         let mut file_type = if entry.path().is_dir() { "folder" } else { guess_file_type(file_name) };
 
-        create_thumbnail(&data.root_dir, &data.thumbnail_dir, file_path, file_type);
-
         if file_type == "video" {
             if entry.metadata().unwrap().len() < 5242880 {
                 file_type = "video/short";
@@ -393,6 +403,18 @@ async fn reload(data: web::Data<AppState>) -> impl Responder {
             Ok(_item) => _item,
             Err(_) => Item::new(file_name.to_owned(), rel_path, file_type.to_owned()),
         };
+
+        let mut children: Vec<String> = Vec::new();
+        if file_type == "folder" {
+            for i in read_dir(file_path).unwrap() {
+                children.push(i.unwrap().path().to_str().unwrap().replace(&data.root_dir, &data.thumbnail_dir) + ".jpg");
+                if children.len() >= 4 {
+                    break;
+                }
+            }
+        }
+
+        create_thumbnail(&data.root_dir, &data.thumbnail_dir, file_path, file_type, children);
 
         let parent_folder = Path::new(&item.path).parent().unwrap_or(Path::new("")).to_str().unwrap();
         if !parent_folder.is_empty() {
@@ -548,7 +570,7 @@ async fn post_upload(data: web::Data<AppState>, form: web::Form<PostData>) -> im
                     }
                 }
 
-                create_thumbnail(&data.root_dir, &data.thumbnail_dir, &dest_file, &item.file_type);
+                create_thumbnail(&data.root_dir, &data.thumbnail_dir, &dest_file, &item.file_type, Vec::new());
                 return HttpResponse::Found().header("Location", format!("/?id={}", id)).finish();
             }
         }
