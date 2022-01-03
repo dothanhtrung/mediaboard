@@ -17,13 +17,13 @@
         <a href="/?id={{item.parent}}">Back to parent</a><br><br>
         <div class="post">
             {% if item.file_type == "image" %}
-            <img class="item" src="/img/{{item.path}}">
+            <img class="item" src="/img/{{item.path}}" style="max-width: 95%;">
             {% elif item.file_type == "video" %}
-            <video class="item" muted controls loop>
+            <video class="item" muted controls loop style="max-width: 95%;">
                 <source src="/img/{{item.path}}">
             </video>
             {% elif item.file_type == "video/short" %}
-            <video class="item" muted controls autoplay loop>
+            <video class="item" muted controls autoplay loop style="max-width: 95%;">
                 <source src="/img/{{item.path}}">
             </video>
             {% endif %}
