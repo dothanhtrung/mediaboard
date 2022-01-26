@@ -5,7 +5,7 @@ mod db;
 use std::collections::HashMap;
 use std::fs::{create_dir_all, rename, File, read_dir};
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -24,8 +24,8 @@ use walkdir::WalkDir;
 struct AppState {
     conn: Connection,
     ipp: u64,
-    root_dir: String,
-    thumbnail_dir: String,
+    root_dir: PathBuf,
+    thumbnail_dir: PathBuf,
 }
 
 #[derive(Deserialize)]
@@ -99,6 +99,8 @@ fn create_thumbnail(root_dir: &str, thumbnail_dir: &str, file_path: &str, file_t
             args.push("2x2");
             args.push("-quality");
             args.push("-25");
+            args.push("-geometry");
+            args.push("+1+1");
             for c in children.iter() {
                 args.push(c);
             }
@@ -279,24 +281,31 @@ async fn item_update(data: web::Data<AppState>, postdata: web::Form<PostData>) -
             let parent = postdata.parent.as_ref().unwrap();
 
             if let Ok(new_parent) = find_item(&data.conn, &format!("id = {}", parent)) {
-                let src_file = format!("{}/{}", &data.root_dir, &item.path);
-                let mut dest_file = String::new();
+                let new_parent_path = PathBuf::from(&new_parent.path);
+                let item_path = Path::new(&item.path);
+                let src_file = data.root_dir.join(item_path);
+                let mut dest_file = PathBuf::new();
                 if item.parent > 0 {
                     let old_parent = find_item(&data.conn, &format!("id = {}", item.parent)).unwrap();
-                    dest_file = src_file.replace(&old_parent.path, &new_parent.path);
+                    let old_parent_path = PathBuf::from(&old_parent.path);
+                    dest_file = src_file.strip_prefix(&data.root_dir).unwrap().to_path_buf();
+                    dest_file = dest_file.strip_prefix(old_parent_path).unwrap().to_path_buf();
+                    dest_file = dest_file.join(new_parent_path);
                 } else {
-                    dest_file = src_file.replace(&data.root_dir, &format!("{}/{}/", data.root_dir, new_parent.path));
+                    dest_file = src_file.strip_prefix(&data.root_dir).unwrap().to_path_buf();
+                    let prefix = data.root_dir.join(new_parent_path);
+                    dest_file = prefix.join(dest_file);
                 }
 
-                let mut new_path = item.path.clone();
+                let mut new_path = PathBuf::from(&item.path);
                 if src_file != dest_file {
                     if let Err(err) = rename(src_file, &dest_file) {
                         eprintln!("Failed to move item {}. {}", item.id, err);
                     } else {
-                        new_path = dest_file.replace(&data.root_dir, "");
-                        let src_thumb = format!("{}/{}.jpg", &data.thumbnail_dir, item.path);
-                        let dest_thumb = format!("{}/{}.jpg", data.thumbnail_dir, new_path);
-                        let thumb_parent_path = format!("{}/{}", data.thumbnail_dir, new_parent.path);
+                        new_path = dest_file.strip_prefix(&data.root_dir).unwrap().to_path_buf();
+                        let src_thumb = format!("{}/{}.jpg", data.thumbnail_dir.to_str().unwrap(), item.path);
+                        let dest_thumb = format!("{}/{}.jpg", data.thumbnail_dir.to_str().unwrap(), new_path.to_str().unwrap());
+                        let thumb_parent_path = format!("{}/{}", data.thumbnail_dir.to_str().unwrap(), new_parent.path);
                         let thumb_parent = Path::new(&thumb_parent_path);
                         if !thumb_parent.exists() {
                             create_dir_all(&thumb_parent);
@@ -306,7 +315,7 @@ async fn item_update(data: web::Data<AppState>, postdata: web::Form<PostData>) -
                     }
                 }
 
-                update_item(&data.conn, item_id, name, parent, &new_path).await;
+                update_item(&data.conn, item_id, name, parent, new_path.to_str().unwrap()).await;
             }
 
             return HttpResponse::Found().header("Location", format!("/?id={}", item_id)).finish();
@@ -318,7 +327,7 @@ async fn item_update(data: web::Data<AppState>, postdata: web::Form<PostData>) -
 
 #[get("/delete/{id}")]
 async fn delete(data: web::Data<AppState>, web::Path(id): web::Path<i64>) -> impl Responder {
-    delete_item(&data.conn, id, &data.root_dir).await;
+    delete_item(&data.conn, id, data.root_dir.to_str().unwrap()).await;
     HttpResponse::Found().header("Location", "/").finish()
 }
 
@@ -386,7 +395,9 @@ async fn reload(data: web::Data<AppState>) -> impl Responder {
         if entry.path().starts_with(Path::new(&data.thumbnail_dir)) {
             continue;
         }
-        let rel_path = file_path.replacen(&data.root_dir, "", 1);
+        let root_path = Path::new(&data.root_dir);
+        // let rel_path = file_path.replacen(&data.root_dir, "", 1);
+        let rel_path = entry.path().strip_prefix(root_path).unwrap().to_str().unwrap_or("");
         if rel_path == "" {
             continue;
         }
@@ -401,20 +412,25 @@ async fn reload(data: web::Data<AppState>) -> impl Responder {
 
         let mut item = match find_item(&data.conn, &format!("path = \"{}\"", rel_path)) {
             Ok(_item) => _item,
-            Err(_) => Item::new(file_name.to_owned(), rel_path, file_type.to_owned()),
+            Err(_) => Item::new(file_name.to_owned(), rel_path.to_string(), file_type.to_owned()),
         };
 
         let mut children: Vec<String> = Vec::new();
         if file_type == "folder" {
             for i in read_dir(file_path).unwrap() {
-                children.push(i.unwrap().path().to_str().unwrap().replace(&data.root_dir, &data.thumbnail_dir) + ".jpg");
+                // let child_path = i.unwrap().path().strip_prefix(data.root_dir.as_path()).unwrap().join(data.thumbnail_dir.as_path()).to_str().unwrap().to_string();
+                let rel_path = i.unwrap().path();
+                let rel_path = rel_path.strip_prefix(&data.root_dir).unwrap();
+                let child_path = data.thumbnail_dir.join(rel_path);
+                let child_path = child_path.to_str().unwrap();
+                children.push(format!("{}.jpg", child_path));
                 if children.len() >= 4 {
                     break;
                 }
             }
         }
 
-        create_thumbnail(&data.root_dir, &data.thumbnail_dir, file_path, file_type, children);
+        create_thumbnail(data.root_dir.to_str().unwrap(), data.thumbnail_dir.to_str().unwrap(), file_path, file_type, children);
 
         let parent_folder = Path::new(&item.path).parent().unwrap_or(Path::new("")).to_str().unwrap();
         if !parent_folder.is_empty() {
@@ -540,18 +556,17 @@ async fn upload_item(data: web::Data<AppState>, mut payload: Multipart) -> impl 
 
 #[post("/post_upload/")]
 async fn post_upload(data: web::Data<AppState>, form: web::Form<PostData>) -> impl Responder {
-    let mut dest_dir = data.root_dir.clone();
+    let mut dest_dir= data.root_dir.clone();
     let mut item = Item::empty();
     if let Some(parent) = &form.parent {
         if let Ok(parent_item) = find_item(&data.conn, &format!("id={} AND file_type=\"folder\"", parent)) {
-            dest_dir.push_str("/");
-            dest_dir.push_str(&parent_item.path);
+            dest_dir = data.root_dir.join(Path::new(&parent_item.path));
             item.parent = parent_item.id;
         }
     }
     if let Some(real_file_name) = &form.real_name {
-        let tmp_file = format!("{}/tmp/{}", data.root_dir, real_file_name);
-        let dest_file = String::from(Path::new(&dest_dir).join(real_file_name).to_str().unwrap());
+        let tmp_file = data.root_dir.join("tmp").join(real_file_name);
+        let dest_file = dest_dir.join(real_file_name);
         if let Ok(()) = rename(&tmp_file, &dest_file) {
             let file_name = match &form.name {
                 Some(name) => name,
@@ -559,7 +574,7 @@ async fn post_upload(data: web::Data<AppState>, form: web::Form<PostData>) -> im
             };
 
             item.name = file_name.to_string();
-            item.path = dest_file.replace(&data.root_dir, "");
+            item.path = dest_file.strip_prefix(data.root_dir.as_path()).unwrap().to_str().unwrap().to_string();
             item.file_type = guess_file_type(real_file_name).to_string();
             item.md5 = form.md5.as_ref().unwrap().clone();
             if let Ok(id) = insert_item(&data.conn, &item).await {
@@ -570,7 +585,8 @@ async fn post_upload(data: web::Data<AppState>, form: web::Form<PostData>) -> im
                     }
                 }
 
-                create_thumbnail(&data.root_dir, &data.thumbnail_dir, &dest_file, &item.file_type, Vec::new());
+                create_thumbnail(data.root_dir.to_str().unwrap(), data.thumbnail_dir.to_str().unwrap(),
+                                 dest_file.to_str().unwrap(), &item.file_type, Vec::new());
                 return HttpResponse::Found().header("Location", format!("/?id={}", id)).finish();
             }
         }
@@ -583,8 +599,9 @@ async fn post_upload(data: web::Data<AppState>, form: web::Form<PostData>) -> im
 async fn main() -> std::io::Result<()> {
     let mut config = Ini::new();
     let _ = config.load("config.ini");
-    let root_dir = config.get("default", "root").unwrap();
-    let thumbnail_dir = String::from(Path::new(&root_dir).join("thumbnail").to_str().unwrap());
+    let config_root_dir = config.get("default", "root").unwrap();
+    let root_dir = Path::new(&config_root_dir).to_path_buf();
+    let thumbnail_dir = root_dir.join("thumbnail");
     let db_path = config.get("default", "db").unwrap();
     let port = config.get("default", "port").unwrap();
     let ipp: u64 = config.get("default", "ipp").unwrap_or("48".to_owned()).parse().unwrap();
