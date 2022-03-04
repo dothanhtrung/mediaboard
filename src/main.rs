@@ -290,12 +290,11 @@ async fn item_update(data: web::Data<AppState>, postdata: web::Form<PostData>) -
                     let old_parent_path = PathBuf::from(&old_parent.path);
                     dest_file = src_file.strip_prefix(&data.root_dir).unwrap().to_path_buf();
                     dest_file = dest_file.strip_prefix(old_parent_path).unwrap().to_path_buf();
-                    dest_file = dest_file.join(new_parent_path);
                 } else {
                     dest_file = src_file.strip_prefix(&data.root_dir).unwrap().to_path_buf();
-                    let prefix = data.root_dir.join(new_parent_path);
-                    dest_file = prefix.join(dest_file);
                 }
+                let prefix = data.root_dir.join(new_parent_path);
+                dest_file = prefix.join(dest_file);
 
                 let mut new_path = PathBuf::from(&item.path);
                 if src_file != dest_file {
@@ -556,7 +555,7 @@ async fn upload_item(data: web::Data<AppState>, mut payload: Multipart) -> impl 
 
 #[post("/post_upload/")]
 async fn post_upload(data: web::Data<AppState>, form: web::Form<PostData>) -> impl Responder {
-    let mut dest_dir= data.root_dir.clone();
+    let mut dest_dir = data.root_dir.clone();
     let mut item = Item::empty();
     if let Some(parent) = &form.parent {
         if let Ok(parent_item) = find_item(&data.conn, &format!("id={} AND file_type=\"folder\"", parent)) {
