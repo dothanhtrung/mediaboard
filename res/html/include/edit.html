@@ -1,27 +1,43 @@
-<script type="text/javascript" src="/js/tags_autocomplete.js"></script>
+
 
 <div class="edit">
-  <form action="/" method="post">
-    Name: <br>
-    <input type="text" name="name" value="{{item.name}}"><br><br>
-    <label>
-      Album
-      <input type="text" name="parent" list="parent_list" value="{{item.parent}}">
+  <form action="/" class="rounded" method="post">
+    <div class="">
+      <label class="block text-gray-700 text-sm font-bold" for="name">
+        Name
+      </label>
+      <input type="text" id="name" name="name" value="{{item.name}}">
+    </div>
+    <div class="">
+      <label class="block text-gray-700 text-sm font-bold" for="parent">
+        Album
+      </label>
+      <input type="text" id="parent" name="parent" list="parent_list" value="{{item.parent}}">
       <datalist id="parent_list">
         {% for p in parents %}
         <option value="{{p.id}}">{{p.name}} ({{p.id}})</option>
         {% endfor %}
       </datalist>
+    </div>
+    <div class="">
+      <label class="block text-gray-700 text-sm font-bold" for="tags">
+        Tags
+      </label>
+    </div>
+    <textarea name="tags" id="tags" rows="9" cols="64">{% for tag in post_tags %}{{tag}} {% endfor %}</textarea>
 
-    </label><br>
-    Tags: <br>
-    <textarea name="tags" id="tags" rows="9" cols="23">{% for tag in post_tags %}{{tag}} {% endfor %}</textarea><br>
-
+      <div class="mt-3">
     <input type="hidden" name="id" value="{{item.id}}">
-    <input type="submit" value="Save">
-  </form>
-  <a href="/delete/{{item.id}}" onclick="return confirm('Delete?')">Delete</a>
+    <input type="submit" value="Save"
+           class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">
 
+      </div>
+  </form>
+  <div class="mt-3">
+  <a href="/delete/{{item.id}}" onclick="return confirm('Delete?')"
+     class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">
+    Delete</a>
+  </div>
 
   <script>
     function autocomplete(inp, arr) {

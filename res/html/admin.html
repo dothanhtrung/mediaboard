@@ -4,17 +4,20 @@
     <meta charset="UTF-8">
     <title>Media Board - Admin</title>
 
-    <link rel="stylesheet" type="text/css" href="/css/common.css">
+    <link rel="stylesheet" type="text/css" href="/css/tailwind_gen.css">
 </head>
 <body>
 
-{% include "header.html" %}
+{% include "include/header.html" %}
 
-<form action="/admin/reload/" method="get">
-    <input type="submit" value="Reload all">
-</form>
-
-<a href="/admin/tags/">Manage tags</a>
+<div class="mt-5">
+<a href="/admin/reload/"
+    class="ml-3 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+    >Reload all</a>
+<a href="/admin/tags/"
+   class="ml-3 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+    >Manage tags</a>
+</div>
 
 </body>
 </html>

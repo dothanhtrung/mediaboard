@@ -1,0 +1,7 @@
+<div class="w-60 h-full absolute">
+    {% for tag, count in page_tags %}
+    <ul class="relative"><li class="relative">
+    <a class="flex text-blue-700 hover:text-gray-900 hover:bg-gray-100 transition" href="?tags={{tag}}">{{tag}} <span class="count">{{count}}</span></a>
+    </li></ul>
+    {% endfor %}
+</div>

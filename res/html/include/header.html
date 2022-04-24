@@ -1,0 +1,32 @@
+<nav class="flex items-center justify-between flex-wrap bg-slate-900 p-3">
+    <div class="flex items-center flex-shrink-0 text-white mr-6">
+        <a class="" href="/"><span class="font-bold text-3xl tracking-tight">Media Board</span></a>
+    </div>
+    <div class="w-full block flex-grow lg:flex lg:items-center lg:w-auto">
+        <div class="text-sm lg:flex-grow">
+            <a class="block mt-4 lg:inline-block lg:mt-0  text-gray-200 hover:text-white mr-4"
+               href="/?view=album_list">
+                <span class="font-semibold text-xl text-gray-200">Album</span>
+            </a>
+            <a class="block mt-4 lg:inline-block lg:mt-0  text-gray-200 hover:text-white mr-4"
+               href="/?tags=series">
+                <span class="font-semibold text-xl text-gray-200">Series</span>
+            </a>
+            <a class="block mt-4 lg:inline-block lg:mt-0  text-gray-200 hover:text-white mr-4"
+               href="/upload/">
+                <span class="font-semibold text-xl">Upload</span>
+            </a>
+            <a class="block mt-4 lg:inline-block lg:mt-0 text-gray-200 hover:text-white mr-4"
+               href="/admin/">
+                <span class="font-semibold text-xl">Admin</span>
+            </a>
+        </div>
+        <div class="">
+            <form class="shadow-md rounded px-2" action="/"
+                  method="get">
+                <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                       type="text" name="tags" placeholder="Search..">
+            </form>
+        </div>
+    </div>
+</nav>

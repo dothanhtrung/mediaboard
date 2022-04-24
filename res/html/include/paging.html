@@ -1,0 +1,114 @@
+
+<div class="flex justify-center mb-2 mt-2">
+    <nav>
+        <ul class="flex list-style-none">
+            <li class="page-item {% if pages.cur <= 1 %}disabled{% endif %}">
+                <a href="{% if pages.cur <= 1 %}#{% else %}?{{old_query}}{% endif %}"
+                   class="page-link relative block py-1.5 px-3 rounded border-0 bg-transparent outline-none transition-all duration-300 rounded text-gray-500
+                 {% if pages.cur <= 1 %}pointer-events-none{% else %}hover:text-gray-800 hover:bg-gray-200{% endif %}
+                 focus:shadow-none"
+                >First</a>
+            </li>
+            <li class="page-item {% if pages.cur <= 1 %}disabled{% endif %}">
+                <a
+                class="page-link relative block py-1.5 px-3 rounded border-0 bg-transparent outline-none transition-all duration-300 rounded text-gray-500
+                 {% if pages.cur <= 1 %}pointer-events-none{% else %}hover:text-gray-800 hover:bg-gray-200{% endif %}
+                 focus:shadow-none"
+                href="{% if pages.cur <= 1 %}#{% else %}?page={{pages.cur - 1}}&{{old_query}}{% endif %}">Previous</a>
+            </li>
+
+            {% if pages.cur > 5 %}
+            ...
+            {% endif %}
+
+            {% if pages.cur > 4 %}
+            <li class="page-item">
+                <a href="?page={{pages.cur-4}}&{{old_query}}"
+               class="page-link relative block py-1.5 px-3 rounded border-0 bg-transparent outline-none transition-all duration-300 rounded text-gray-800 hover:text-gray-800 hover:bg-gray-200 focus:shadow-none"
+                >{{pages.cur-4}}</a>
+            </li>
+            {% endif %}
+
+            {% if pages.cur > 3 %}
+            <li class="page-item">
+                <a href="?page={{pages.cur-3}}&{{old_query}}"
+                   class="page-link relative block py-1.5 px-3 rounded border-0 bg-transparent outline-none transition-all duration-300 rounded text-gray-800 hover:text-gray-800 hover:bg-gray-200 focus:shadow-none"
+                >{{pages.cur-3}}</a>
+            </li>
+            {% endif %}
+
+            {% if pages.cur > 2 %}
+            <li class="page-item">
+                <a href="?page={{pages.cur-2}}&{{old_query}}"
+                   class="page-link relative block py-1.5 px-3 rounded border-0 bg-transparent outline-none transition-all duration-300 rounded text-gray-800 hover:text-gray-800 hover:bg-gray-200 focus:shadow-none"
+                >{{pages.cur-2}}</a>
+            </li>
+            {% endif %}
+
+            {% if pages.cur > 1 %}
+            <li class="page-item">
+                <a href="?page={{pages.cur-1}}&{{old_query}}"
+                   class="page-link relative block py-1.5 px-3 rounded border-0 bg-transparent outline-none transition-all duration-300 rounded text-gray-800 hover:text-gray-800 hover:bg-gray-200 focus:shadow-none"
+                >{{pages.cur-1}}</a>
+            </li>
+            {% endif %}
+
+            <li class="page-item active">
+                <a href="?page={{pages.cur}}&{{old_query}}"
+                   class="page-link relative block py-1.5 px-3 rounded border-0 bg-blue-600 outline-none transition-all duration-300 rounded text-white hover:text-white hover:bg-blue-600 shadow-md focus:shadow-md"
+                >{{pages.cur}}</a>
+            </li>
+
+            {% if pages.cur < pages.total %}
+            <li class="page-item">
+                <a href="?page={{pages.cur+1}}&{{old_query}}"
+                   class="page-link relative block py-1.5 px-3 rounded border-0 bg-transparent outline-none transition-all duration-300 rounded text-gray-800 hover:text-gray-800 hover:bg-gray-200 focus:shadow-none"
+                >{{pages.cur+1}}</a>
+            </li>
+            {% endif %}
+
+            {% if pages.cur < pages.total - 1 %}
+            <li class="page-item">
+                <a href="?page={{pages.cur+2}}&{{old_query}}"
+                   class="page-link relative block py-1.5 px-3 rounded border-0 bg-transparent outline-none transition-all duration-300 rounded text-gray-800 hover:text-gray-800 hover:bg-gray-200 focus:shadow-none"
+                >{{pages.cur+2}}</a>
+            </li>
+            {% endif %}
+
+            {% if pages.cur < pages.total - 2 %}
+            <li class="page-item">
+                <a href="?page={{pages.cur+3}}&{{old_query}}"
+                   class="page-link relative block py-1.5 px-3 rounded border-0 bg-transparent outline-none transition-all duration-300 rounded text-gray-800 hover:text-gray-800 hover:bg-gray-200 focus:shadow-none"
+                >{{pages.cur+3}}</a>
+            </li>
+            {% endif %}
+
+            {% if pages.cur < pages.total - 3 %}
+            <li class="page-item">
+                <a href="?page={{pages.cur+4}}&{{old_query}}"
+                   class="page-link relative block py-1.5 px-3 rounded border-0 bg-transparent outline-none transition-all duration-300 rounded text-gray-800 hover:text-gray-800 hover:bg-gray-200 focus:shadow-none"
+                >{{pages.cur+4}}</a>
+            </li>
+            {% endif %}
+
+            {% if pages.cur < pages.total - 4 %}
+            ...
+            {% endif %}
+
+            <li class="page-item {% if pages.cur >= pages.total %}disabled{% endif %}">
+                <a href="{% if pages.cur >= pages.total %}#{% else %}?page={{pages.cur + 1}}&{{old_query}}{% endif %}"
+                   class="page-link relative block py-1.5 px-3 rounded border-0 bg-transparent outline-none transition-all duration-300 rounded text-gray-500
+                 {% if pages.cur >= pages.total %}pointer-events-none{% else %}hover:text-gray-800 hover:bg-gray-200{% endif %}
+                 focus:shadow-none"
+                >Next</a>
+            </li>
+            <li class="page-item {% if pages.cur >= pages.total %}disabled{% endif %}">
+                <a href="{% if pages.cur >= pages.total %}#{% else %}?page={{pages.total}}&{{old_query}}{% endif %}"
+                   class="page-link relative block py-1.5 px-3 rounded border-0 bg-transparent outline-none transition-all duration-300 rounded text-gray-500
+                 {% if pages.cur >= pages.total %}pointer-events-none{% else %}hover:text-gray-800 hover:bg-gray-200{% endif %}
+                 focus:shadow-none"
+                >Last</a>
+            </li>
+        </ul>
+    </nav>
+</div>

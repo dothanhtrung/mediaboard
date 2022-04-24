@@ -4,17 +4,22 @@
     <meta charset="UTF-8">
     <title>Media Board - {{item.name}}</title>
 
-    <link rel="stylesheet" type="text/css" href="/css/common.css">
+    <link rel="stylesheet" type="text/css" href="/css/tailwind_gen.css">
 </head>
 <body>
 
-{% include "header.html" %}
+{% include "include/header.html" %}
 
-<div class="page-container">
-    {% include "sidebar.html" %}
+<div class="">
+    {% include "include/sidebar.html" %}
 
-    <div class="main">
-        <a href="/?id={{item.parent}}">Back to parent</a><br><br>
+    <div class="ml-60">
+        <nav class="bg-gray-100 px-5 py-3 rounded-md w-full">
+            <ol class="list-reset flex">
+        <li><a href="/?id={{item.parent}}" class="text-blue-600 hover:text-blue-700">
+            Back to parent</a></li>
+            </ol>
+        </nav>
         <div class="post">
             {% if item.file_type == "image" %}
             <img class="item" src="/img/{{item.path}}" style="max-width: 95%;">
@@ -28,7 +33,7 @@
             </video>
             {% endif %}
         </div>
-        {% include "edit.html" %}
+        {% include "include/edit.html" %}
     </div>
 
 </div>
