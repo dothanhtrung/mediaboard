@@ -78,10 +78,10 @@ fn guess_file_type(file_name: &str) -> &str {
     }
 }
 
-fn create_thumbnail(root_dir: &str, thumbnail_dir: &str, file_path: &str, file_type: &str, children: Vec<String>) {
+fn create_thumbnail(root_dir: &str, thumbnail_dir: &str, file_path: &str, file_type: &str, children: Vec<String>, force: bool) {
     let thumb_path = format!("{}.jpg", file_path.replacen(root_dir, &format!("{}/", thumbnail_dir), 1));
     let thumb_file = Path::new(&thumb_path);
-    if !thumb_file.exists() {
+    if force || file_type == "folder" || !thumb_file.exists() {
         let thumb_file_parrent = thumb_file.parent().unwrap();
         if !thumb_file_parrent.exists() {
             if let Err(_) = create_dir_all(&thumb_file_parrent) {
@@ -429,7 +429,9 @@ async fn reload(data: web::Data<AppState>) -> impl Responder {
             }
         }
 
-        create_thumbnail(data.root_dir.to_str().unwrap(), data.thumbnail_dir.to_str().unwrap(), file_path, file_type, children);
+        let mut force = if file_type == "folder" { true } else { false };
+
+        create_thumbnail(data.root_dir.to_str().unwrap(), data.thumbnail_dir.to_str().unwrap(), file_path, file_type, children, force);
 
         let parent_folder = Path::new(&item.path).parent().unwrap_or(Path::new("")).to_str().unwrap();
         if !parent_folder.is_empty() {
@@ -585,7 +587,8 @@ async fn post_upload(data: web::Data<AppState>, form: web::Form<PostData>) -> im
                 }
 
                 create_thumbnail(data.root_dir.to_str().unwrap(), data.thumbnail_dir.to_str().unwrap(),
-                                 dest_file.to_str().unwrap(), &item.file_type, Vec::new());
+                                 dest_file.to_str().unwrap(), &item.file_type, Vec::new(),
+                                 false);
                 return HttpResponse::Found().header("Location", format!("/?id={}", id)).finish();
             }
         }
