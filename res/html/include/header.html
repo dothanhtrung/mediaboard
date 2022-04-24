@@ -21,12 +21,49 @@
                 <span class="font-semibold text-xl">Admin</span>
             </a>
         </div>
-        <div class="">
+        <div class="block lg:flex-grow justify-center" >
             <form class="shadow-md rounded px-2" action="/"
                   method="get">
                 <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                       type="text" name="tags" placeholder="Search..">
+                       type="search" name="tags" placeholder="Search..">
             </form>
+
+        </div>
+        <div class="block flex justify-center" >
+            <div class="form-check form-switch">
+                <input
+                        class="form-check-input appearance-none w-9 -ml-10 rounded-full float-left h-5 align-top bg-white bg-no-repeat bg-contain bg-gray-300 focus:outline-none cursor-pointer shadow-sm"
+                        type="checkbox" role="switch" id="rawSwitch" onclick="switchRaw();"
+                        {% if raw %}checked{% endif %}>
+                <label class="form-check-label inline-block text-gray-50" for="rawSwitch">Raw</label>
+            </div>
         </div>
     </div>
 </nav>
+
+<script>
+    document.body.onload = function() {
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.has('raw')) {
+            var raw = urlParams.get('raw');
+            if (raw == '0') {
+                document.getElementById("rawSwitch").checked = false;
+            } else {
+                document.getElementById("rawSwitch").checked = true;
+            }
+        } else {
+            document.getElementById("rawSwitch").checked = false;
+        }
+    };
+
+
+    function switchRaw(){
+        const urlParams = new URLSearchParams(window.location.search);
+        if(document.getElementById('rawSwitch').checked){
+            urlParams.set('raw', 1);
+        } else {
+            urlParams.set('raw', 0);
+        }
+        window.location.search = urlParams;
+    }
+</script>

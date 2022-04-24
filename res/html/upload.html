@@ -39,12 +39,16 @@
   </label><br>
   <input type="hidden" name="real_name" value="{{real_file_name}}">
   <input type="hidden" name="md5" value="{{md5}}">
-  <input type="submit" value="Add">
+  <input type="submit" value="Add"
+         class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+  >
 </form>
 {% else %}
 <form action="/upload/" method="post" enctype="multipart/form-data">
   <input type="file" name="file"><br>
-  <input type="submit" value="Upload">
+  <input type="submit" value="Upload"
+         class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+  >
 </form>
 {% endif %}
 

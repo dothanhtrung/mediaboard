@@ -29,11 +29,11 @@
             <div class="" id="dir_{{loop.index}}" tabindex="{{loop.index}}">
                 <a href="/?id={{item.id}}">
                     {% if item.file_type != "folder" %}
-                        {% if view == "series" %}
+                        {% if view == "series" or raw == 1 %}
                             {% if item.file_type == "image" %}
                                 <img class="rounded rounded-lg border" src="/img/{{item.path}}" width="100%">
                             {% else %}
-                                <video class="item" muted controls loop>
+                                <video class="item" muted controls loop {% if item.file_type == "video/short" %}autoplay{% endif %}>
                                     <source src="/img/{{item.path}}">
                                 </video>
                             {% endif %}

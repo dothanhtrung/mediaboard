@@ -16,7 +16,9 @@
     <label>Depend
         <textarea name="deps">{% for tag in deps %}{{tag.name}} {% endfor %}</textarea><br></label><br>
     <input type="hidden" name="id" value="{{tag.id}}">
-    <input type="submit" value="Save">
+    <input type="submit" value="Save"
+           class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+    >
 </form>
 <a href="/delete/tag/{{tag.id}}" onclick="return confirm('Delete tag {{tag.name}}?')">Delete</a>
 </body>

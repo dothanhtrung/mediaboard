@@ -37,6 +37,7 @@ struct QueryInfo {
     file_name: Option<String>,
     real_file_name: Option<String>,
     md5: Option<String>,
+    raw: Option<u8>,
 }
 
 #[derive(Deserialize)]
@@ -138,6 +139,10 @@ async fn index(tmpl: web::Data<tera::Tera>, data: web::Data<AppState>, query: we
         all_tags = tags;
     }
     ctx.insert("tags", &all_tags);
+
+    let raw = query.raw.unwrap_or(0);
+    ctx.insert("raw", &raw);
+    old_query.push(format!("raw={}", raw));
 
     let mut view = match &query.view {
         Some(v) => {
