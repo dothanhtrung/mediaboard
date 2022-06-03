@@ -13,6 +13,7 @@ use actix_files::Files;
 use actix_multipart::Multipart;
 use actix_web::{App, error, get, HttpResponse, HttpServer, post, Responder, web};
 use async_std::prelude::*;
+use clap::Parser;
 use configparser::ini::Ini;
 use futures::{StreamExt, TryStreamExt};
 use md5::{Md5, Digest};
@@ -26,6 +27,12 @@ struct AppState {
     ipp: u64,
     root_dir: PathBuf,
     thumbnail_dir: PathBuf,
+}
+
+#[derive(Parser)]
+struct Cli {
+    #[clap(short, long, default_value="config.ini")]
+    config: String,
 }
 
 #[derive(Deserialize)]
@@ -604,8 +611,9 @@ async fn post_upload(data: web::Data<AppState>, form: web::Form<PostData>) -> im
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    let args = Cli::parse();
     let mut config = Ini::new();
-    let _ = config.load("config.ini");
+    let _ = config.load(args.config);
     let config_root_dir = config.get("default", "root").unwrap();
     let root_dir = Path::new(&config_root_dir).to_path_buf();
     let thumbnail_dir = root_dir.join("thumbnail");
