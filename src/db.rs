@@ -1,5 +1,6 @@
 use rusqlite::{params, Connection, Result};
 use serde::Serialize;
+use sqlx::SqlitePool;
 
 use std::collections::HashMap;
 use std::fs::{remove_dir_all, remove_file};
@@ -51,12 +52,17 @@ impl Item {
     }
 }
 
-pub async fn insert_item(conn: &Connection, item: &Item) -> Result<i64> {
-    if let Err(err) = conn.execute("INSERT INTO item (name, path, file_type, parent, md5) VALUES (?1, ?2, ?3, ?4, ?5)",
-                                   params![item.name, item.path, item.file_type, item.parent, item.md5]) {
-        return Err(err);
-    } else {
-        return Ok(conn.last_insert_rowid());
+pub async fn insert_item(pool: &SqlitePool, item: &Item) -> Result<i64, sqlx::Error> {
+    let ret = sqlx::query(r#"INSERT INTO item (name, path, file_type, parent, md5) VALUES (?, ?, ?, ?, ?)"#)
+        .bind(item.name.as_str())
+        .bind(item.path.as_str())
+        .bind(item.file_type.as_str())
+        .bind(item.parent)
+        .bind(item.md5.as_str())
+        .execute(pool).await;
+    match ret {
+        Ok(res) => Ok(res.last_insert_rowid()),
+        Err(e) => Err(e),
     }
 }
 

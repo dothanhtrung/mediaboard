@@ -19,11 +19,14 @@ use futures::{StreamExt, TryStreamExt};
 use md5::{Md5, Digest};
 use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
+use sqlx::SqlitePool;
+use sqlx::sqlite::SqlitePoolOptions;
 use tera::Tera;
 use walkdir::WalkDir;
 
 struct AppState {
     conn: Connection,
+    pool: SqlitePool,
     ipp: u64,
     root_dir: PathBuf,
     thumbnail_dir: PathBuf,
@@ -590,7 +593,7 @@ async fn post_upload(data: web::Data<AppState>, form: web::Form<PostData>) -> im
             item.path = dest_file.strip_prefix(data.root_dir.as_path()).unwrap().to_str().unwrap().to_string();
             item.file_type = guess_file_type(real_file_name).to_string();
             item.md5 = form.md5.as_ref().unwrap().clone();
-            if let Ok(id) = insert_item(&data.conn, &item).await {
+            if let Ok(id) = insert_item(&data.pool, &item).await {
                 if let Some(_tags) = &form.tags {
                     let tags: Vec<&str> = _tags.split_whitespace().collect();
                     if let Err(err) = update_item_tags(&data.conn, id, tags).await {
@@ -620,6 +623,7 @@ async fn main() -> std::io::Result<()> {
     let db_path = config.get("default", "db").unwrap();
     let port = config.get("default", "port").unwrap();
     let ipp: u64 = config.get("default", "ipp").unwrap_or("48".to_owned()).parse().unwrap();
+    let pool = SqlitePoolOptions::new().max_connections(5).connect(&db_path).await.unwrap();
 
     HttpServer::new(move || {
         let tera = Tera::new(concat!(env!("CARGO_MANIFEST_DIR"), "/res/html/**/*")).unwrap();
@@ -628,6 +632,7 @@ async fn main() -> std::io::Result<()> {
             .data(tera)
             .data(AppState {
                 conn: Connection::open(&db_path).unwrap(),
+                pool: pool.clone(),
                 ipp,
                 root_dir: root_dir.clone(),
                 thumbnail_dir: thumbnail_dir.clone(),
