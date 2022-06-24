@@ -53,13 +53,21 @@ impl Item {
 }
 
 pub async fn insert_item(pool: &SqlitePool, item: &Item) -> Result<i64, sqlx::Error> {
-    let ret = sqlx::query(r#"INSERT INTO item (name, path, file_type, parent, md5) VALUES (?, ?, ?, ?, ?)"#)
+    let mut query = sqlx::query(r#"INSERT INTO item (name, path, file_type, md5) VALUES (?, ?, ?, ?)"#)
         .bind(item.name.as_str())
         .bind(item.path.as_str())
         .bind(item.file_type.as_str())
-        .bind(item.parent)
-        .bind(item.md5.as_str())
-        .execute(pool).await;
+        .bind(item.md5.as_str());
+
+    if item.parent > 0 {
+        query = sqlx::query(r#"INSERT INTO item (name, path, file_type, parent, md5) VALUES (?, ?, ?, ?, ?)"#)
+            .bind(item.name.as_str())
+            .bind(item.path.as_str())
+            .bind(item.file_type.as_str())
+            .bind(item.parent)
+            .bind(item.md5.as_str());
+    }
+    let ret = query.execute(pool).await;
     match ret {
         Ok(res) => Ok(res.last_insert_rowid()),
         Err(e) => Err(e),
@@ -332,13 +340,13 @@ pub async fn update_tag(conn: &Connection, id: i64, name: &str, deps: Vec<&str>)
     return Ok(());
 }
 
-pub async fn count_tags(conn: &Connection) -> Result<HashMap<String,u64>> {
-    let mut ret :HashMap<String, u64> = HashMap::new();
+pub async fn count_tags(conn: &Connection) -> Result<HashMap<String, u64>> {
+    let mut ret: HashMap<String, u64> = HashMap::new();
     let mut stmt = conn.prepare("SELECT tag.name, COUNT(item_tag.tag) FROM tag LEFT JOIN item_tag ON tag.id = item_tag.tag GROUP BY item_tag.tag;")?;
     let mut rows = stmt.query([])?;
     while let Some(row) = rows.next()? {
-        let tag :String = row.get(0)?;
-        let count :u64 = row.get(1)?;
+        let tag: String = row.get(0)?;
+        let count: u64 = row.get(1)?;
         ret.insert(tag, count);
     }
     Ok(ret)
