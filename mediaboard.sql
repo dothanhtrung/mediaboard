@@ -1,17 +1,16 @@
--- we don't know how to generate root <with-no-name> (class Root) :(
 create table item
 (
-    id INTEGER
+    id         INTEGER not null
         constraint item_pk
             primary key,
-    name TEXT,
-    path TEXT,
-    file_type TEXT,
+    name       TEXT    not null,
+    path       TEXT    not null,
+    file_type  TEXT    not null,
     created_at TEXT default (STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW')) not null,
-    parent INTEGER
+    parent     INTEGER
         references item
             on update cascade on delete cascade,
-    md5 TEXT
+    md5        TEXT    not null
 );
 
 create unique index item_id_uindex
@@ -25,22 +24,23 @@ create unique index item_path_uindex
 
 create table tag
 (
-    id INTEGER
+    id         INTEGER not null
         primary key,
-    name TEXT
+    name       TEXT    not null
         unique,
-    created_at TEXT default (STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW')) not null
+    created_at TEXT default (STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW')) not null,
+    alias      integer
 );
 
 create table item_tag
 (
-    id INTEGER
+    id   INTEGER not null
         constraint item_tag_pk
             primary key,
-    item INTEGER
+    item INTEGER not null
         references item
             on delete cascade,
-    tag INTEGER
+    tag  INTEGER not null
         references tag
             on delete cascade
 );
@@ -53,13 +53,13 @@ create unique index tag_id_uindex
 
 create table tag_tag
 (
-    id INTEGER
+    id  INTEGER not null
         constraint tag_tag_pk
             primary key,
-    tag INTEGER
+    tag INTEGER not null
         references tag
             on delete cascade,
-    dep INTEGER
+    dep INTEGER not null
         references tag
             on delete cascade
 );

@@ -14,12 +14,15 @@
     {% include "include/sidebar.html" %}
 
     <div class="ml-60">
+        {% if item.parent %}
         <nav class="bg-gray-100 px-5 py-3 rounded-md w-full">
             <ol class="list-reset flex">
         <li><a href="/?id={{item.parent}}" class="text-blue-600 hover:text-blue-700">
             Back to parent</a></li>
             </ol>
         </nav>
+        {% endif %}
+
         <div class="post">
             {% if item.file_type == "image" %}
             <img class="item" src="/img/{{item.path}}" style="max-width: 95%;">

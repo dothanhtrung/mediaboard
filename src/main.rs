@@ -1,6 +1,6 @@
-use db::*;
-
 mod db;
+
+use db::*;
 
 use std::collections::HashMap;
 use std::fs::{create_dir_all, rename, File, read_dir};
@@ -15,9 +15,10 @@ use actix_web::{App, error, get, HttpResponse, HttpServer, post, Responder, web}
 use async_std::prelude::*;
 use clap::Parser;
 use configparser::ini::Ini;
+use dotenv::dotenv;
 use futures::{StreamExt, TryStreamExt};
 use md5::{Md5, Digest};
-use rusqlite::{Connection, params};
+use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use sqlx::sqlite::SqlitePoolOptions;
@@ -34,7 +35,7 @@ struct AppState {
 
 #[derive(Parser)]
 struct Cli {
-    #[clap(short, long, default_value="config.ini")]
+    #[clap(short, long, default_value = "config.ini")]
     config: String,
 }
 
@@ -125,7 +126,7 @@ fn create_thumbnail(root_dir: &str, thumbnail_dir: &str, file_path: &str, file_t
 #[get("/")]
 async fn index(tmpl: web::Data<tera::Tera>, data: web::Data<AppState>, query: web::Query<QueryInfo>) -> impl Responder {
     let mut ctx = tera::Context::new();
-    let mut page_tags: HashMap<String, u64> = HashMap::new();
+    let mut page_tags: HashMap<String, i32> = HashMap::new();
     let mut post_tags = Vec::new();
     let mut cond = Vec::new();
     let mut where_clause = String::new();
@@ -138,16 +139,12 @@ async fn index(tmpl: web::Data<tera::Tera>, data: web::Data<AppState>, query: we
     let mut old_query = Vec::new();
     let mut select_clause = String::from("item.id, item.name, item.path, item.file_type, item.created_at, item.parent, item.md5");
     let mut having_clause = "".to_owned();
-    let tags_count = count_tags(&data.conn).await.unwrap_or_default();
+    let tags_count = tag::count_tags(&data.pool).await.unwrap_or_default();
 
-    let folders = find_items(&data.conn, "SELECT * FROM item WHERE file_type = \"folder\"").unwrap_or(vec!());
+    let folders = item::find_by_type(&data.pool, "folder").await.unwrap_or(vec![]);
     ctx.insert("parents", &folders);
 
-    let mut all_tags: Vec<Tag> = Vec::new();
-    if let Ok(mut tags) = find_tags(&data.conn, None).await {
-        tags.sort_by(|a, b| a.name.cmp(&b.name));
-        all_tags = tags;
-    }
+    let all_tags = tag::find_all(&data.pool).await.unwrap_or(vec![]);
     ctx.insert("tags", &all_tags);
 
     let raw = query.raw.unwrap_or(0);
@@ -164,7 +161,7 @@ async fn index(tmpl: web::Data<tera::Tera>, data: web::Data<AppState>, query: we
     let id = query.id.unwrap_or_default();
     if id > 0 {
         old_query.push(format!("id={}", id));
-        for tag in find_tags_by_items(&data.conn, vec![id]).unwrap() {
+        for tag in tag::find_by_items(&data.pool, vec![id]).await.unwrap_or(vec![]) {
             post_tags.push(tag.name.clone());
             if view.is_empty() && tag.name == "series" {
                 view = "series".to_owned();
@@ -176,7 +173,7 @@ async fn index(tmpl: web::Data<tera::Tera>, data: web::Data<AppState>, query: we
             page_tags.insert(tag.clone(), tags_count[&tag.clone()]);
         }
 
-        match find_item(&data.conn, &format!("id = {}", id)) {
+        match item::find_by_id(&data.pool, id).await {
             Ok(item) => {
                 ctx.insert("item", &item);
                 ctx.insert("page_tags", &page_tags);
@@ -192,7 +189,9 @@ async fn index(tmpl: web::Data<tera::Tera>, data: web::Data<AppState>, query: we
                     return HttpResponse::Ok().content_type("text/html").body(template);
                 }
             }
-            Err(_) => { return HttpResponse::Ok().body("Not found!"); }
+            Err(err) => {
+                println!("Cannot find item: {:?}", err);
+                return HttpResponse::Ok().body("Not found!"); }
         }
     } else {
         let mut searching_tags = false;
@@ -208,11 +207,11 @@ async fn index(tmpl: web::Data<tera::Tera>, data: web::Data<AppState>, query: we
         }
 
         if !searching_tags {
-            let find_series_sql = "SELECT item.id  FROM item
+            let find_series_sql = "SELECT item.id FROM item
                  LEFT JOIN item_tag ON item_tag.item = item.id
                  LEFT JOIN tag ON item_tag.tag = tag.id
             WHERE tag.name == \"series\"";
-            match find_item_ids(&data.conn, find_series_sql) {
+            match item::find_item_ids(&data.conn, find_series_sql) {
                 Ok(series_ids) => cond.push(format!("item.parent NOT IN ({})", series_ids.join(","))),
                 Err(err) => println!("{}", err),
             }
@@ -237,8 +236,8 @@ async fn index(tmpl: web::Data<tera::Tera>, data: web::Data<AppState>, query: we
     }
 
     let sql = format!("SELECT {} FROM {} {} {} {} {} {}", select_clause, from_clause, join_clause, where_clause, group_by_clause, having_clause, order_by);
-    let count = count_items(&data.conn, &sql).unwrap_or(0);
-    let mut items = match find_items(&data.conn, &format!("{} {}", sql, limit_clause)) {
+    let count = item::count_items(&data.conn, &sql).unwrap_or(0);
+    let mut items = match item::find_items(&data.conn, &format!("{} {}", sql, limit_clause)) {
         Ok(_items) => _items,
         Err(err) => {
             eprintln!("{}", err);
@@ -250,14 +249,13 @@ async fn index(tmpl: web::Data<tera::Tera>, data: web::Data<AppState>, query: we
     for item in &items {
         item_ids.push(item.id);
     }
-    if let Ok(_tags) = find_tags_by_items(&data.conn, item_ids) {
-        for t in _tags {
-            let tag_name = t.name.clone();
-            if !page_tags.contains_key(&tag_name) {
-                page_tags.insert(t.name, tags_count[&tag_name]);
-            }
+    for t in tag::find_by_items(&data.pool, item_ids).await.unwrap_or(vec![]) {
+        let tag_name = t.name.clone();
+        if !page_tags.contains_key(&tag_name) {
+            page_tags.insert(t.name, tags_count[&tag_name]);
         }
     }
+
     // page_tags.sort_by(|a, b| a.cmp(&b));
     ctx.insert("page_tags", &page_tags);
 
@@ -283,57 +281,58 @@ async fn index(tmpl: web::Data<tera::Tera>, data: web::Data<AppState>, query: we
 
 #[post("/")]
 async fn item_update(data: web::Data<AppState>, postdata: web::Form<PostData>) -> impl Responder {
-    if let Some(item_id) = postdata.id {
-        if let Ok(item) = find_item(&data.conn, &format!("id = {}", item_id)) {
+    if let Some(id) = postdata.id {
+        if let Ok(mut item) = item::find_by_id(&data.pool, id).await {
             if let Some(_tags) = &postdata.tags {
                 let tags: Vec<&str> = _tags.split_whitespace().collect();
-                if let Err(err) = update_item_tags(&data.conn, item_id, tags).await {
-                    eprintln!("Failed to update tag. {}", err);
-                }
+                tag::update_item_tags(&data.pool, id, tags).await;
             }
 
             let name = postdata.name.as_ref().unwrap();
             let parent = postdata.parent.as_ref().unwrap();
-
-            if let Ok(new_parent) = find_item(&data.conn, &format!("id = {}", parent)) {
-                let new_parent_path = PathBuf::from(&new_parent.path);
-                let item_path = Path::new(&item.path);
-                let src_file = data.root_dir.join(item_path);
-                let mut dest_file = PathBuf::new();
-                if item.parent > 0 {
-                    let old_parent = find_item(&data.conn, &format!("id = {}", item.parent)).unwrap();
-                    let old_parent_path = PathBuf::from(&old_parent.path);
-                    dest_file = src_file.strip_prefix(&data.root_dir).unwrap().to_path_buf();
-                    dest_file = dest_file.strip_prefix(old_parent_path).unwrap().to_path_buf();
-                } else {
-                    dest_file = src_file.strip_prefix(&data.root_dir).unwrap().to_path_buf();
-                }
-                let prefix = data.root_dir.join(new_parent_path);
-                dest_file = prefix.join(dest_file);
-
-                let mut new_path = PathBuf::from(&item.path);
-                if src_file != dest_file {
-                    if let Err(err) = rename(src_file, &dest_file) {
-                        eprintln!("Failed to move item {}. {}", item.id, err);
-                    } else {
-                        new_path = dest_file.strip_prefix(&data.root_dir).unwrap().to_path_buf();
-                        let src_thumb = format!("{}/{}.jpg", data.thumbnail_dir.to_str().unwrap(), item.path);
-                        let dest_thumb = format!("{}/{}.jpg", data.thumbnail_dir.to_str().unwrap(), new_path.to_str().unwrap());
-                        let thumb_parent_path = format!("{}/{}", data.thumbnail_dir.to_str().unwrap(), new_parent.path);
-                        let thumb_parent = Path::new(&thumb_parent_path);
-                        if !thumb_parent.exists() {
-                            create_dir_all(&thumb_parent);
+            if let Ok(parent_id) = parent.parse::<i64>() {
+                if let Ok(new_parent) = item::find_by_id(&data.pool, parent_id).await {
+                    let new_parent_path = PathBuf::from(&new_parent.path);
+                    let item_path = Path::new(&item.path);
+                    let src_file = data.root_dir.join(item_path);
+                    let mut dest_file = PathBuf::new();
+                    if let Some(parent_id) = item.parent {
+                        if let Ok(old_parent) = item::find_by_id(&data.pool, parent_id).await {
+                            let old_parent_path = PathBuf::from(&old_parent.path);
+                            dest_file = src_file.strip_prefix(&data.root_dir).unwrap().to_path_buf();
+                            dest_file = dest_file.strip_prefix(old_parent_path).unwrap().to_path_buf();
                         }
-
-                        rename(src_thumb, dest_thumb);
+                    } else {
+                        dest_file = src_file.strip_prefix(&data.root_dir).unwrap().to_path_buf();
                     }
+                    let prefix = data.root_dir.join(new_parent_path);
+                    dest_file = prefix.join(dest_file);
+
+                    let mut new_path = PathBuf::from(&item.path);
+                    if src_file != dest_file {
+                        if let Err(err) = rename(src_file, &dest_file) {
+                            eprintln!("Failed to move item {}. {}", item.id, err);
+                        } else {
+                            new_path = dest_file.strip_prefix(&data.root_dir).unwrap().to_path_buf();
+                            let src_thumb = format!("{}/{}.jpg", data.thumbnail_dir.to_str().unwrap(), item.path);
+                            let dest_thumb = format!("{}/{}.jpg", data.thumbnail_dir.to_str().unwrap(), new_path.to_str().unwrap());
+                            let thumb_parent_path = format!("{}/{}", data.thumbnail_dir.to_str().unwrap(), new_parent.path);
+                            let thumb_parent = Path::new(&thumb_parent_path);
+                            if !thumb_parent.exists() {
+                                create_dir_all(&thumb_parent);
+                            }
+
+                            rename(src_thumb, dest_thumb);
+                        }
+                    }
+                    item.name = name.to_string();
+                    item.parent = Some(parent_id);
+                    item.path = new_path.to_str().unwrap_or("").to_string();
+                    item::update(&data.pool, item).await;
                 }
-
-                update_item(&data.conn, item_id, name, parent, new_path.to_str().unwrap()).await;
             }
-
-            return HttpResponse::Found().header("Location", format!("/?id={}", item_id)).finish();
         }
+        return HttpResponse::Found().header("Location", format!("/?id={}", id)).finish();
     }
 
     HttpResponse::Found().header("Location", "/").finish()
@@ -341,7 +340,7 @@ async fn item_update(data: web::Data<AppState>, postdata: web::Form<PostData>) -
 
 #[get("/delete/{id}")]
 async fn delete(data: web::Data<AppState>, web::Path(id): web::Path<i64>) -> impl Responder {
-    delete_item(&data.conn, id, data.root_dir.to_str().unwrap()).await;
+    item::delete_item(&data.pool, id, data.root_dir.to_str().unwrap()).await;
     HttpResponse::Found().header("Location", "/").finish()
 }
 
@@ -355,8 +354,7 @@ async fn admin(tmpl: web::Data<tera::Tera>) -> impl Responder {
 #[get("/admin/tags/")]
 async fn manage_tags(data: web::Data<AppState>, tmpl: web::Data<tera::Tera>) -> impl Responder {
     let mut ctx = tera::Context::new();
-    if let Ok(mut tags) = count_tags(&data.conn).await {
-        // tags.sort_by(|a, b| a.name.cmp(&b.name));
+    if let Ok(tags) = tag::count_tags(&data.pool).await {
         ctx.insert("tags", &tags);
     }
     let template = tmpl.render("tags.html", &ctx).map_err(|_| error::ErrorInternalServerError("Template error")).unwrap();
@@ -367,8 +365,8 @@ async fn manage_tags(data: web::Data<AppState>, tmpl: web::Data<tera::Tera>) -> 
 async fn manage_tag(data: web::Data<AppState>, web::Path(name): web::Path<String>, tmpl: web::Data<tera::Tera>) -> impl Responder {
     let mut ctx = tera::Context::new();
 
-    let tag = find_tag_or_create(&data.conn, &name).unwrap();
-    let deps = find_depend_tags(&data.conn, tag.id).unwrap();
+    let tag = tag::find_or_create(&data.pool, &name).await.unwrap();
+    let deps = tag::find_depend_tags(&data.pool, tag.id).await.unwrap();
 
     ctx.insert("tag", &tag);
     ctx.insert("deps", &deps);
@@ -380,8 +378,8 @@ async fn manage_tag(data: web::Data<AppState>, web::Path(name): web::Path<String
 async fn tag_update(data: web::Data<AppState>, tagdata: web::Form<TagData>) -> impl Responder {
     let name = tagdata.name.as_ref().unwrap();
     let id = tagdata.id.unwrap();
-    if let Ok(tags) = find_tags(&data.conn, Some(&format!("name = {}", name))).await {
-        if tags[0].id != id {
+    if let Ok(tag) = tag::find_by_name(&data.pool, name).await {
+        if tag.id != id {
             eprintln!("Tag with name {} already exists", name);
             return HttpResponse::Found().header("Location", format!("/admin/tag/{}", name)).finish();
         }
@@ -392,13 +390,13 @@ async fn tag_update(data: web::Data<AppState>, tagdata: web::Form<TagData>) -> i
         deps = post_deps.split_whitespace().collect();
     }
 
-    update_tag(&data.conn, id, &name, deps).await;
+    tag::update_tag(&data.pool, id, &name, deps).await;
     return HttpResponse::Found().header("Location", format!("/admin/tag/{}", name)).finish();
 }
 
 #[get("/delete/tag/{id}")]
 async fn tag_delete(data: web::Data<AppState>, web::Path(id): web::Path<i64>) -> impl Responder {
-    delete_tag(&data.conn, id).await;
+    tag::delete_tag(&data.pool, id).await;
     HttpResponse::Found().header("Location", "/admin/tags/").finish()
 }
 
@@ -424,9 +422,9 @@ async fn reload(data: web::Data<AppState>) -> impl Responder {
             }
         }
 
-        let mut item = match find_item(&data.conn, &format!("path = \"{}\"", rel_path)) {
+        let mut item = match item::find_by_path(&data.pool, rel_path).await {
             Ok(_item) => _item,
-            Err(_) => Item::new(file_name.to_owned(), rel_path.to_string(), file_type.to_owned()),
+            Err(_) => item::Item::new(file_name.to_owned(), rel_path.to_string(), file_type.to_owned()),
         };
 
         let mut children: Vec<String> = Vec::new();
@@ -444,16 +442,16 @@ async fn reload(data: web::Data<AppState>) -> impl Responder {
             }
         }
 
-        let mut force = if file_type == "folder" { true } else { false };
+        let force = if file_type == "folder" { true } else { false };
 
         create_thumbnail(data.root_dir.to_str().unwrap(), data.thumbnail_dir.to_str().unwrap(), file_path, file_type, children, force);
 
         let parent_folder = Path::new(&item.path).parent().unwrap_or(Path::new("")).to_str().unwrap();
         if !parent_folder.is_empty() {
-            if let Ok(_item) = find_item(&data.conn, &format!("path=\"{}\"", parent_folder)) {
-                item.parent = _item.id;
+            if let Ok(_item) = item::find_by_path(&data.pool, parent_folder).await {
+                item.parent = Some(_item.id);
             } else {
-                item.parent = 0;
+                item.parent = None;
             }
         }
 
@@ -467,19 +465,18 @@ async fn reload(data: web::Data<AppState>) -> impl Responder {
                 }
             }
             item.md5 = format!("{:x}", md5.finalize());
-            match find_item(&data.conn, &format!("md5 = \"{}\"", item.md5)) {
+            match item::find_by_md5(&data.pool, &item.md5).await {
                 Ok(_) => println!("{}: duplicated md5sum {}.", item.path, item.md5),
                 Err(_) => {
-                    if let Err(err) = insert_item(&data.conn, &item).await {
-                        eprintln!("Failed to insert item. {}", err);
+                    if let Err(err) = item::insert(&data.pool, &item).await {
+                        eprintln!("Failed to insert item. {:?}", err);
                     }
                 }
             };
         } else {
             if item.file_type != file_type {
-                data.conn.execute("UPDATE item SET file_type = ?1 WHERE id = ?2",
-                                  params![file_type, item.id],
-                ).expect("Update item successfully");
+                item.file_type = file_type.to_string();
+                item::update(&data.pool, item).await;
             }
         }
     }
@@ -501,14 +498,10 @@ async fn upload(data: web::Data<AppState>, tmpl: web::Data<tera::Tera>, query: w
         }
     }
 
-    let folders = find_items(&data.conn, "SELECT * FROM item WHERE file_type = \"folder\"").unwrap_or(vec!());
+    let folders = item::find_by_type(&data.pool, "folder").await.unwrap_or(vec!());
     ctx.insert("parents", &folders);
 
-    let mut all_tags: Vec<Tag> = Vec::new();
-    if let Ok(mut tags) = find_tags(&data.conn, None).await {
-        tags.sort_by(|a, b| a.name.cmp(&b.name));
-        all_tags = tags;
-    }
+    let all_tags = tag::find_all(&data.pool).await.unwrap_or(vec![]);
     ctx.insert("tags", &all_tags);
 
     let template = tmpl.render("upload.html", &ctx).map_err(|_| error::ErrorInternalServerError("Template error")).unwrap();
@@ -573,11 +566,15 @@ async fn upload_item(data: web::Data<AppState>, mut payload: Multipart) -> impl 
 #[post("/post_upload/")]
 async fn post_upload(data: web::Data<AppState>, form: web::Form<PostData>) -> impl Responder {
     let mut dest_dir = data.root_dir.clone();
-    let mut item = Item::empty();
+    let mut item = item::Item::empty();
     if let Some(parent) = &form.parent {
-        if let Ok(parent_item) = find_item(&data.conn, &format!("id={} AND file_type=\"folder\"", parent)) {
-            dest_dir = data.root_dir.join(Path::new(&parent_item.path));
-            item.parent = parent_item.id;
+        if let Ok(parent_id) = parent.parse::<i64>() {
+            if let Ok(parent_item) = item::find_by_id(&data.pool, parent_id).await {
+                if parent_item.file_type == "folder" {
+                    dest_dir = data.root_dir.join(Path::new(&parent_item.path));
+                    item.parent = Some(parent_item.id);
+                }
+            }
         }
     }
     if let Some(real_file_name) = &form.real_name {
@@ -593,12 +590,10 @@ async fn post_upload(data: web::Data<AppState>, form: web::Form<PostData>) -> im
             item.path = dest_file.strip_prefix(data.root_dir.as_path()).unwrap().to_str().unwrap().to_string();
             item.file_type = guess_file_type(real_file_name).to_string();
             item.md5 = form.md5.as_ref().unwrap().clone();
-            if let Ok(id) = insert_item(&data.pool, &item).await {
+            if let Ok(id) = item::insert(&data.pool, &item).await {
                 if let Some(_tags) = &form.tags {
                     let tags: Vec<&str> = _tags.split_whitespace().collect();
-                    if let Err(err) = update_item_tags(&data.conn, id, tags).await {
-                        eprintln!("Failed to update tag. {}", err);
-                    }
+                    tag::update_item_tags(&data.pool, id, tags).await;
                 }
 
                 create_thumbnail(data.root_dir.to_str().unwrap(), data.thumbnail_dir.to_str().unwrap(),
@@ -614,6 +609,7 @@ async fn post_upload(data: web::Data<AppState>, form: web::Form<PostData>) -> im
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    dotenv().ok();
     let args = Cli::parse();
     let mut config = Ini::new();
     let _ = config.load(args.config);
