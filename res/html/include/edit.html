@@ -12,10 +12,10 @@
       <label class="block text-gray-700 text-sm font-bold" for="parent">
         Album
       </label>
-      <input type="text" id="parent" name="parent" list="parent_list" value="{{item.parent}}">
+      <input type="text" id="parent" name="parent" list="parent_list" value="{{parent}}">
       <datalist id="parent_list">
-        {% for p in parents %}
-        <option value="{{p.id}}">{{p.name}} ({{p.id}})</option>
+        {% for d in folders %}
+        <option value="{{d.id}}">{{d.name}} ({{d.id}})</option>
         {% endfor %}
       </datalist>
     </div>
@@ -24,7 +24,7 @@
         Tags
       </label>
     </div>
-    <textarea name="tags" id="tags" rows="9" cols="64">{% for tag in post_tags %}{{tag}} {% endfor %}</textarea>
+    <textarea name="tags" id="tags" rows="9" cols="64">{% for tag in page_tags %}{{tag.name}} {% endfor %}</textarea>
 
       <div class="mt-3">
     <input type="hidden" name="id" value="{{item.id}}">
@@ -142,8 +142,8 @@
 
     /*An array containing all the country names in the world:*/
     var tags = [
-      {% for t in tags %}
-    "{{t.name}}",
+      {% for tag, count in tags %}
+    "{{tag}}",
     {% endfor %}
     ""
     ];

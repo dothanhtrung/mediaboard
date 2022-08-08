@@ -2,7 +2,6 @@ use std::fs::{remove_dir_all, remove_file};
 use std::path::Path;
 
 use async_recursion::async_recursion;
-use rusqlite::{Connection};
 use serde::Serialize;
 use sqlx::sqlite::SqliteQueryResult;
 use sqlx::SqlitePool;
@@ -50,6 +49,13 @@ macro_rules! update {
 macro_rules! find_by_column {
     ($pool: expr, $col: literal, $val: expr) => {
         sqlx::query_as!(Item, "SELECT * FROM item WHERE " + $col + " = ?", $val).fetch_all($pool).await
+    };
+    ($pool: expr, $col: literal, $val: expr, $limit: expr, $offset: expr, $order: literal) => {
+        sqlx::query_as!(Item, r#"SELECT item.id as "id!", item.name as "name!", item.path as "path!",
+                                    item.file_type as "file_type!", item.created_at as "created_at!",
+                                    item.parent as parent, item.md5 as "md5!"
+                        FROM item WHERE "# + $col + " = ? ORDER BY " + $order + " LIMIT ? OFFSET ?"
+        , $val, $limit, $offset).fetch_all($pool).await
     }
 }
 
@@ -61,6 +67,23 @@ macro_rules! find_one_by_column {
         sqlx::query_as!(Item, "SELECT * FROM item WHERE " + $col1 + " = ? AND " + $col2 + " = ?", $val1, $val2).fetch_one($pool).await
     }
 }
+
+// TODO: Shorten code by macro
+// macro_rules! find_and_count {
+//     ($pool: expr, $query: literal, $start: expr, $end: expr, $($arg:expr),*) => {
+//         let items = sqlx::query_as!(Item,
+//             r#"SELECT item.id as "id!", item.name as "name!", item.path as "path!",
+//                 item.file_type as "file_type!", item.created_at as "created_at!",
+//                 item.parent as parent, item.md5 as "md5!""#
+//                 + $query +
+//                 r#"ORDER BY item.created_at DESC LIMIT ?, ?"#
+//             , $($arg,)* , start, end).fetch_all(pool).await?;
+//         let count = sqlx::query!(r#"SELECT COUNT(*) as count"# + $query
+//             $(, $arg)*).fetch_one(pool).await?;
+//
+//         return Ok((items, count.count));
+//     };
+// }
 
 macro_rules! delete_by_column {
     ($col: expr, $val: expr, $pool: expr) => {
@@ -124,8 +147,56 @@ pub async fn find_by_md5(pool: &SqlitePool, md5: &str) -> Result<Item, sqlx::Err
     find_one_by_column!("md5", md5, pool)
 }
 
-pub async fn find_by_parent(pool: &SqlitePool, parent: Option<i64>) -> Result<Vec<Item>, sqlx::Error> {
-    find_by_column!(pool, "parent", parent)
+pub async fn find_by_parent(pool: &SqlitePool, parent: Option<i64>, limit: Option<i64>, offset: Option<i64>) -> Result<Vec<Item>, sqlx::Error> {
+    if limit == None || offset == None {
+        find_by_column!(pool, "parent", parent)
+    } else {
+        find_by_column!(pool, "parent", parent, limit, offset, "name ASC")
+    }
+}
+
+pub async fn find_by_tag(pool: &SqlitePool, tags: Vec<String>, limit: i64, offset: i64) -> Result<(Vec<Item>, i64), sqlx::Error> {
+    let tags = tags.join(",");
+    let items = sqlx::query_as!(Item, r#"SELECT item.id as "id!", item.name as "name!", item.path as "path!",
+                                    item.file_type as "file_type!", item.created_at as "created_at!",
+                                    item.parent as parent, item.md5 as "md5!"
+    FROM item LEFT JOIN item_tag ON item_tag.item = item.id
+              LEFT JOIN tag ON item_tag.tag = tag.id
+    WHERE tag.name IN (?)
+    GROUP BY item.id
+    ORDER BY item.created_at DESC LIMIT ? OFFSET ?"#
+        ,tags ,limit, offset).fetch_all(pool).await?;
+    let count = sqlx::query!(r#"SELECT COUNT(*) as count
+    FROM item LEFT JOIN item_tag ON item_tag.item = item.id
+              LEFT JOIN tag ON item_tag.tag = tag.id
+    WHERE tag.name IN (?)
+    GROUP BY item.id"#
+        ,tags).fetch_one(pool).await?;
+
+    Ok((items, count.count))
+}
+
+pub async fn find_not_in_series(pool: &SqlitePool, limit: i64, offset: i64) -> Result<(Vec<Item>, i64), sqlx::Error> {
+    let items = sqlx::query_as!(Item,
+            r#"SELECT item.id as "id!", item.name as "name!", item.path as "path!",
+                      item.file_type as "file_type!", item.created_at as "created_at!",
+                      item.parent as parent, item.md5 as "md5!"
+            FROM item WHERE parent NOT IN (
+                SELECT item.id FROM item LEFT JOIN item_tag ON item_tag.item = item.id
+                LEFT JOIN tag ON item_tag.tag = tag.id
+                WHERE tag.name == "series")
+            ORDER BY created_at DESC LIMIT ? OFFSET ?"#
+        ,limit, offset).fetch_all(pool).await?;
+
+    let count = sqlx::query!(r#"SELECT COUNT(*) as count
+            FROM item WHERE parent NOT IN (
+                SELECT item.id FROM item LEFT JOIN item_tag ON item_tag.item = item.id
+                LEFT JOIN tag ON item_tag.tag = tag.id
+                WHERE tag.name == "series"
+            )"#
+        ).fetch_one(pool).await?;
+
+    Ok((items, count.count as i64))
 }
 
 pub async fn delete_by_id(pool: &SqlitePool, id: i64) {
@@ -134,25 +205,6 @@ pub async fn delete_by_id(pool: &SqlitePool, id: i64) {
 
 pub async fn delete_by_parent(pool: &SqlitePool, parent: Option<i64>) {
     delete_by_column!("parent", parent, pool);
-}
-
-pub fn find_items(conn: &Connection, query: &str) -> rusqlite::Result<Vec<Item>> {
-    let mut stmt = conn.prepare(query)?;
-    let mut rows = stmt.query([])?;
-    let mut items = Vec::new();
-    while let Some(row) = rows.next()? {
-        let id = row.get(0)?;
-        items.push(Item {
-            id,
-            name: row.get(1)?,
-            path: row.get(2)?,
-            file_type: row.get(3)?,
-            created_at: row.get(4)?,
-            parent: row.get(5)?,
-            md5: row.get(6)?,
-        });
-    }
-    return Ok(items);
 }
 
 async fn delete_local_file(file_path: &str) -> Result<(), std::io::Error> {
@@ -174,7 +226,7 @@ pub async fn delete_item(pool: &SqlitePool, id: i64, root_dir: &str) {
 
     item_tag::delete_by_item(pool, id).await;
 
-    let items = find_by_parent(pool, Some(id)).await.unwrap_or(vec![]);
+    let items = find_by_parent(pool, Some(id), None, None).await.unwrap_or(vec![]);
     for item in items {
         delete_item(pool, item.id, root_dir).await;
     }
@@ -187,23 +239,4 @@ pub async fn delete_item(pool: &SqlitePool, id: i64, root_dir: &str) {
         delete_local_file(&thumbnail_path).await;
         delete_by_id(pool, id).await;
     }
-}
-
-pub fn find_item_ids(conn: &Connection, query: &str) -> rusqlite::Result<Vec<String>> {
-    let mut stmt = conn.prepare(query)?;
-    let mut rows = stmt.query([])?;
-    let mut ids = Vec::new();
-    while let Some(row) = rows.next()? {
-        let id: i64 = row.get(0)?;
-        ids.push(id.to_string());
-    }
-
-    Ok(ids)
-}
-
-pub fn count_items(conn: &Connection, sql: &String) -> rusqlite::Result<u64> {
-    let mut stmt = conn.prepare(&format!("SELECT COUNT(*) FROM ({})", sql))?;
-    stmt.query_row([], |row| {
-        Ok(row.get(0)?)
-    })
 }

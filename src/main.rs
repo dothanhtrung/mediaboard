@@ -18,17 +18,16 @@ use configparser::ini::Ini;
 use dotenv::dotenv;
 use futures::{StreamExt, TryStreamExt};
 use md5::{Md5, Digest};
-use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
+use serde_json::to_string;
 use sqlx::SqlitePool;
 use sqlx::sqlite::SqlitePoolOptions;
 use tera::Tera;
 use walkdir::WalkDir;
 
 struct AppState {
-    conn: Connection,
     pool: SqlitePool,
-    ipp: u64,
+    ipp: i64,
     root_dir: PathBuf,
     thumbnail_dir: PathBuf,
 }
@@ -41,7 +40,7 @@ struct Cli {
 
 #[derive(Deserialize)]
 struct QueryInfo {
-    page: Option<u64>,
+    page: Option<u32>,
     id: Option<i64>,
     view: Option<String>,
     tags: Option<String>,
@@ -71,8 +70,8 @@ struct TagData {
 
 #[derive(Serialize)]
 struct Pages {
-    cur: u64,
-    total: u64,
+    cur: u32,
+    total: i64,
 }
 
 fn guess_file_type(file_name: &str) -> &str {
@@ -125,142 +124,84 @@ fn create_thumbnail(root_dir: &str, thumbnail_dir: &str, file_path: &str, file_t
 
 #[get("/")]
 async fn index(tmpl: web::Data<tera::Tera>, data: web::Data<AppState>, query: web::Query<QueryInfo>) -> impl Responder {
+    // context to pass data to html template
     let mut ctx = tera::Context::new();
-    let mut page_tags: HashMap<String, i32> = HashMap::new();
-    let mut post_tags = Vec::new();
-    let mut cond = Vec::new();
-    let mut where_clause = String::new();
-    let mut limit_clause = format!("LIMIT {}", data.ipp);
-    let join_clause = "LEFT JOIN item_tag ON item_tag.item = item.id
-                       LEFT JOIN tag ON item_tag.tag = tag.id";
-    let from_clause = "item";
-    let group_by_clause = "GROUP BY item.id";
-    let mut order_by = "ORDER BY item.created_at DESC";
+
+    // query to pass to next URL
     let mut old_query = Vec::new();
-    let mut select_clause = String::from("item.id, item.name, item.path, item.file_type, item.created_at, item.parent, item.md5");
-    let mut having_clause = "".to_owned();
-    let tags_count = tag::count_tags(&data.pool).await.unwrap_or_default();
 
-    let folders = item::find_by_type(&data.pool, "folder").await.unwrap_or(vec![]);
-    ctx.insert("parents", &folders);
+    // Tags of showing items to display in side bar
+    let mut page_tags;
 
-    let all_tags = tag::find_all(&data.pool).await.unwrap_or(vec![]);
+    // All tags and its count
+    let all_tags = tag::count_tags(&data.pool).await.unwrap_or_default();
     ctx.insert("tags", &all_tags);
 
-    let raw = query.raw.unwrap_or(0);
+    // Show original item instead of thumbnail
+    let raw = query.raw.unwrap_or_default();
     ctx.insert("raw", &raw);
     old_query.push(format!("raw={}", raw));
 
-    let mut view = match &query.view {
-        Some(v) => {
-            old_query.push(format!("view={}", v));
-            v.clone()
-        }
-        None => String::new(),
-    };
+    // Items to show
+    let mut items = Vec::new();
+
+    // Current page
+    let page = query.page.unwrap_or_default();
+
+    // View mode
+    let view = query.view.as_deref().unwrap_or_default();
+    old_query.push(format!("view={}", view));
+    ctx.insert("view", &view);
+
+    // List of folders
+    let folders = item::find_by_type(&data.pool, "folder").await.unwrap_or(vec![]);
+    ctx.insert("folders", &folders);
+
+    // Offset for LIMIT clause
+    let offset = (page as i64 - 1) * data.ipp;
+
+    // Total number of items
+    let mut count = 0;
+
+    // Parent of showing item
+    let mut parent = 0;
+
     let id = query.id.unwrap_or_default();
     if id > 0 {
         old_query.push(format!("id={}", id));
-        for tag in tag::find_by_items(&data.pool, vec![id]).await.unwrap_or(vec![]) {
-            post_tags.push(tag.name.clone());
-            if view.is_empty() && tag.name == "series" {
-                view = "series".to_owned();
-            }
-        }
-        post_tags.sort_by(|a, b| a.cmp(&b));
-
-        for tag in &post_tags {
-            page_tags.insert(tag.clone(), tags_count[&tag.clone()]);
-        }
-
         match item::find_by_id(&data.pool, id).await {
             Ok(item) => {
+                parent = item.parent.unwrap_or_default();
+                page_tags = tag::find_by_items(&data.pool, vec![id]).await.unwrap_or_default();
                 ctx.insert("item", &item);
                 ctx.insert("page_tags", &page_tags);
-                ctx.insert("post_tags", &post_tags);
 
                 if item.file_type == "folder" {
-                    cond.push(format!("item.parent = {}", id));
-                    if view == "series" {
-                        order_by = " ORDER BY item.name ASC";
-                    }
+                    items = item::find_by_parent(&data.pool, Some(id), Some(data.ipp), Some(offset)).await.unwrap_or_default();
                 } else {
+                    ctx.insert("parent", &parent);
                     let template = tmpl.render("post.html", &ctx).map_err(|_| error::ErrorInternalServerError("Template error")).unwrap();
                     return HttpResponse::Ok().content_type("text/html").body(template);
                 }
             }
             Err(err) => {
                 println!("Cannot find item: {:?}", err);
-                return HttpResponse::Ok().body("Not found!"); }
+                return HttpResponse::Ok().body("Not found!");
+            }
         }
     } else {
-        let mut searching_tags = false;
-        if let Some(_search_tags) = &query.tags {
-            if !_search_tags.is_empty() {
-                searching_tags = true;
-                select_clause.push_str(", COUNT(*) AS c");
-                let search_tags: Vec<&str> = _search_tags.split_whitespace().collect();
-                cond.push(format!("tag.name in (\"{}\")", search_tags.join("\",\"")));
-                having_clause = format!("HAVING c = {}", search_tags.len());
-                old_query.push(format!("tags={}", _search_tags));
-            }
-        }
+        // tags that will be searched for
+        let searching_tags: Vec<String> = query.tags.as_deref().unwrap_or_default().split_whitespace().map(str::to_string).collect();
 
-        if !searching_tags {
-            let find_series_sql = "SELECT item.id FROM item
-                 LEFT JOIN item_tag ON item_tag.item = item.id
-                 LEFT JOIN tag ON item_tag.tag = tag.id
-            WHERE tag.name == \"series\"";
-            match item::find_item_ids(&data.conn, find_series_sql) {
-                Ok(series_ids) => cond.push(format!("item.parent NOT IN ({})", series_ids.join(","))),
-                Err(err) => println!("{}", err),
-            }
-        }
-    }
-
-    let page = query.page.unwrap_or(1);
-    if page > 0 {
-        limit_clause = format!("LIMIT {}, {}", (page - 1) * data.ipp, data.ipp);
-    }
-
-    if view == "album_list" {
-        cond.push("item.file_type = \"folder\"".to_owned());
-    }
-
-    if !cond.is_empty() {
-        if cond.len() == 1 {
-            where_clause = format!("WHERE {}", cond.join(" AND "));
+        if searching_tags.len() > 0 {
+            (items, count) = item::find_by_tag(&data.pool, searching_tags, data.ipp, offset).await.unwrap_or_default();
         } else {
-            where_clause = format!("WHERE ({})", cond.join(") AND ("));
+            // Find all items that not in a series
+            (items, count) = item::find_not_in_series(&data.pool, data.ipp, offset).await.unwrap_or_default();
         }
-    }
 
-    let sql = format!("SELECT {} FROM {} {} {} {} {} {}", select_clause, from_clause, join_clause, where_clause, group_by_clause, having_clause, order_by);
-    let count = item::count_items(&data.conn, &sql).unwrap_or(0);
-    let mut items = match item::find_items(&data.conn, &format!("{} {}", sql, limit_clause)) {
-        Ok(_items) => _items,
-        Err(err) => {
-            eprintln!("{}", err);
-            Vec::new()
-        }
-    };
-
-    let mut item_ids = Vec::new();
-    for item in &items {
-        item_ids.push(item.id);
-    }
-    for t in tag::find_by_items(&data.pool, item_ids).await.unwrap_or(vec![]) {
-        let tag_name = t.name.clone();
-        if !page_tags.contains_key(&tag_name) {
-            page_tags.insert(t.name, tags_count[&tag_name]);
-        }
-    }
-
-    // page_tags.sort_by(|a, b| a.cmp(&b));
-    ctx.insert("page_tags", &page_tags);
-
-    if id == 0 {
-        items.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        let item_ids: Vec<i64> = items.iter().map(|i| i.id).collect();
+        page_tags = tag::find_by_items(&data.pool, item_ids).await.unwrap_or_default();
     }
 
     let total_page = count / data.ipp + if count % data.ipp != 0 { 1 } else { 0 };
@@ -268,12 +209,13 @@ async fn index(tmpl: web::Data<tera::Tera>, data: web::Data<AppState>, query: we
         cur: page,
         total: total_page,
     };
+    ctx.insert("pages", &pages);
 
     ctx.insert("items", &items);
-    ctx.insert("pages", &pages);
     ctx.insert("old_query", &old_query.join("&"));
     ctx.insert("item_id", &id);
-    ctx.insert("view", &view);
+    ctx.insert("parent", &parent); // TODO: Get parent from item
+    ctx.insert("page_tags", &page_tags);
 
     let template = tmpl.render("index.html", &ctx).map_err(|_| error::ErrorInternalServerError("Template error")).unwrap();
     HttpResponse::Ok().content_type("text/html").body(template)
@@ -618,7 +560,7 @@ async fn main() -> std::io::Result<()> {
     let thumbnail_dir = root_dir.join("thumbnail");
     let db_path = config.get("default", "db").unwrap();
     let port = config.get("default", "port").unwrap();
-    let ipp: u64 = config.get("default", "ipp").unwrap_or("48".to_owned()).parse().unwrap();
+    let ipp: u32 = config.get("default", "ipp").unwrap_or("48".to_owned()).parse().unwrap();
     let pool = SqlitePoolOptions::new().max_connections(5).connect(&db_path).await.unwrap();
 
     HttpServer::new(move || {
@@ -627,9 +569,8 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .data(tera)
             .data(AppState {
-                conn: Connection::open(&db_path).unwrap(),
                 pool: pool.clone(),
-                ipp,
+                ipp: ipp as i64,
                 root_dir: root_dir.clone(),
                 thumbnail_dir: thumbnail_dir.clone(),
             })

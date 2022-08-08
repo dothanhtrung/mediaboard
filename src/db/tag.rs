@@ -1,4 +1,3 @@
-
 use crate::{item_tag, tag_tag};
 
 use std::collections::HashMap;
@@ -51,8 +50,12 @@ pub async fn find_by_items(pool: &SqlitePool, item_ids: Vec<i64>) -> Result<Vec<
     for id in item_ids {
         ids.push(id.to_string());
     }
-    let ids_join = ids.join(",");
-    sqlx::query_as!(Tag, r#"SELECT tag.id, name, alias, created_at from tag JOIN item_tag ON tag.id = item_tag.tag WHERE item in (?) GROUP BY tag.id"#, ids_join).fetch_all(pool).await
+
+    // TODO: update when sqlx support carray https://github.com/launchbadge/sqlx/issues/1113
+    let ids_join = format!("[{}]", ids.join(","));
+    sqlx::query_as!(Tag, r#"SELECT tag.id, name, alias, created_at from tag
+        LEFT JOIN item_tag ON tag.id = item_tag.tag
+        WHERE item_tag.item IN (SELECT value FROM JSON_EACH(?)) GROUP BY tag.id ORDER BY tag.name ASC"#, ids_join).fetch_all(pool).await
 }
 
 pub async fn find_or_create(pool: &SqlitePool, name: &str) -> Result<Tag, sqlx::Error> {
@@ -152,7 +155,8 @@ pub async fn delete_tag(pool: &SqlitePool, id: i64) {
 
 pub async fn count_tags(pool: &SqlitePool) -> Result<HashMap<String, i32>, sqlx::Error> {
     let mut ret: HashMap<String, i32> = HashMap::new();
-    let recs = sqlx::query!(r#"SELECT tag.name as name, COUNT(item_tag.tag) as count FROM tag LEFT JOIN item_tag ON tag.id = item_tag.tag GROUP BY tag.name ORDER BY name ASC"#)
+    let recs = sqlx::query!(r#"SELECT tag.name as name, COUNT(item_tag.tag) as count
+    FROM tag LEFT JOIN item_tag ON tag.id = item_tag.tag GROUP BY tag.name ORDER BY count DESC"#)
         .fetch_all(pool).await?;
     for rec in recs {
         ret.insert(rec.name, rec.count.unwrap_or(0));

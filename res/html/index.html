@@ -15,8 +15,8 @@
     {% include "include/sidebar.html" %}
 
     <div class="ml-60">
-        {% if item_id > 0 %}
-        <a href="/?id={{item.parent}}">Back to parent</a><br><br>
+        {% if parent %}
+        <a href="/?id={{parent}}">Back to parent</a><br><br>
         {% endif %}
 
         {% include "include/paging.html" %}
