@@ -1,9 +1,5 @@
-mod db;
-
-use db::*;
-
 use std::collections::HashMap;
-use std::fs::{create_dir_all, rename, File, read_dir};
+use std::fs::{create_dir_all, File, read_dir, rename};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -17,13 +13,17 @@ use clap::Parser;
 use configparser::ini::Ini;
 use dotenv::dotenv;
 use futures::{StreamExt, TryStreamExt};
-use md5::{Md5, Digest};
+use md5::{Digest, Md5};
 use serde::{Deserialize, Serialize};
 use serde_json::to_string;
-use sqlx::SqlitePool;
 use sqlx::sqlite::SqlitePoolOptions;
+use sqlx::SqlitePool;
 use tera::Tera;
 use walkdir::WalkDir;
+
+use db::*;
+
+mod db;
 
 struct AppState {
     pool: SqlitePool,
@@ -214,7 +214,7 @@ async fn index(tmpl: web::Data<tera::Tera>, data: web::Data<AppState>, query: we
     ctx.insert("items", &items);
     ctx.insert("old_query", &old_query.join("&"));
     ctx.insert("item_id", &id);
-    ctx.insert("parent", &parent); // TODO: Get parent from item
+    ctx.insert("parent", &parent); // TODO: In template, get parent from item instead
     ctx.insert("page_tags", &page_tags);
 
     let template = tmpl.render("index.html", &ctx).map_err(|_| error::ErrorInternalServerError("Template error")).unwrap();
@@ -281,8 +281,8 @@ async fn item_update(data: web::Data<AppState>, postdata: web::Form<PostData>) -
 }
 
 #[get("/delete/{id}")]
-async fn delete(data: web::Data<AppState>, web::Path(id): web::Path<i64>) -> impl Responder {
-    item::delete_item(&data.pool, id, data.root_dir.to_str().unwrap()).await;
+async fn delete(data: web::Data<AppState>, id: web::Path<i64>) -> impl Responder {
+    item::delete_item(&data.pool, id.into_inner(), data.root_dir.to_str().unwrap()).await;
     HttpResponse::Found().header("Location", "/").finish()
 }
 
@@ -304,10 +304,10 @@ async fn manage_tags(data: web::Data<AppState>, tmpl: web::Data<tera::Tera>) -> 
 }
 
 #[get("/admin/tag/{name}")]
-async fn manage_tag(data: web::Data<AppState>, web::Path(name): web::Path<String>, tmpl: web::Data<tera::Tera>) -> impl Responder {
+async fn manage_tag(data: web::Data<AppState>, name: web::Path<String>, tmpl: web::Data<tera::Tera>) -> impl Responder {
     let mut ctx = tera::Context::new();
 
-    let tag = tag::find_or_create(&data.pool, &name).await.unwrap();
+    let tag = tag::find_or_create(&data.pool, &name.into_inner()).await.unwrap();
     let deps = tag::find_depend_tags(&data.pool, tag.id).await.unwrap();
 
     ctx.insert("tag", &tag);
@@ -337,8 +337,8 @@ async fn tag_update(data: web::Data<AppState>, tagdata: web::Form<TagData>) -> i
 }
 
 #[get("/delete/tag/{id}")]
-async fn tag_delete(data: web::Data<AppState>, web::Path(id): web::Path<i64>) -> impl Responder {
-    tag::delete_tag(&data.pool, id).await;
+async fn tag_delete(data: web::Data<AppState>, id: web::Path<i64>) -> impl Responder {
+    tag::delete_tag(&data.pool, id.into_inner()).await;
     HttpResponse::Found().header("Location", "/admin/tags/").finish()
 }
 
@@ -467,10 +467,7 @@ async fn upload_item(data: web::Data<AppState>, mut payload: Multipart) -> impl 
         let mut md5_context = Md5::new();
         let mut md5sum = String::new();
 
-        let content_type = field
-            .content_disposition()
-            .ok_or_else(|| actix_web::error::ParseError::Incomplete).unwrap();
-        file_name = content_type
+        file_name = field.content_disposition()
             .get_filename()
             .ok_or_else(|| actix_web::error::ParseError::Incomplete).unwrap().to_string();
         real_file_name = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_micros().to_string();

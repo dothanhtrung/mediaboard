@@ -1,6 +1,9 @@
+
+.env
 Cargo.lock
+package.json
 package-lock.json
 
 .idea/
-target/
 node_modules/
+target/
