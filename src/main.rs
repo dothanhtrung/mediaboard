@@ -146,7 +146,7 @@ async fn index(tmpl: web::Data<tera::Tera>, data: web::Data<AppState>, query: we
     let mut items = Vec::new();
 
     // Current page
-    let page = query.page.unwrap_or_default();
+    let page = query.page.unwrap_or(1);
 
     // View mode
     let view = query.view.as_deref().unwrap_or_default();
@@ -177,7 +177,7 @@ async fn index(tmpl: web::Data<tera::Tera>, data: web::Data<AppState>, query: we
                 ctx.insert("page_tags", &page_tags);
 
                 if item.file_type == "folder" {
-                    items = item::find_by_parent(&data.pool, Some(id), Some(data.ipp), Some(offset)).await.unwrap_or_default();
+                    (items, count) = item::find_by_parent(&data.pool, Some(id), Some(data.ipp), Some(offset)).await.unwrap_or_default();
                 } else {
                     ctx.insert("parent", &parent);
                     let template = tmpl.render("post.html", &ctx).map_err(|_| error::ErrorInternalServerError("Template error")).unwrap();
@@ -191,9 +191,11 @@ async fn index(tmpl: web::Data<tera::Tera>, data: web::Data<AppState>, query: we
         }
     } else {
         // tags that will be searched for
-        let searching_tags: Vec<String> = query.tags.as_deref().unwrap_or_default().split_whitespace().map(str::to_string).collect();
+        let searching_tags_str = query.tags.as_deref().unwrap_or_default();
+        let searching_tags: Vec<String> = searching_tags_str.split_whitespace().map(str::to_string).collect();
 
         if searching_tags.len() > 0 {
+            old_query.push(format!("tag={}", searching_tags_str));
             (items, count) = item::find_by_tag(&data.pool, searching_tags, data.ipp, offset).await.unwrap_or_default();
         } else {
             // Find all items that not in a series

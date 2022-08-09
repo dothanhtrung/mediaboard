@@ -5,7 +5,7 @@ use async_recursion::async_recursion;
 use serde::Serialize;
 use sqlx::sqlite::SqliteQueryResult;
 use sqlx::SqlitePool;
-use crate::item_tag;
+use crate::{item_tag, tag};
 
 #[derive(Serialize)]
 pub struct Item {
@@ -147,12 +147,30 @@ pub async fn find_by_md5(pool: &SqlitePool, md5: &str) -> Result<Item, sqlx::Err
     find_one_by_column!("md5", md5, pool)
 }
 
-pub async fn find_by_parent(pool: &SqlitePool, parent: Option<i64>, limit: Option<i64>, offset: Option<i64>) -> Result<Vec<Item>, sqlx::Error> {
-    if limit == None || offset == None {
-        find_by_column!(pool, "parent", parent)
-    } else {
-        find_by_column!(pool, "parent", parent, limit, offset, "name ASC")
+pub async fn find_by_parent(pool: &SqlitePool, parent: Option<i64>, limit: Option<i64>, offset: Option<i64>) -> Result<(Vec<Item>, i64), sqlx::Error> {
+    let items;
+    let mut is_series = false;
+    let tags = tag::find_by_items(pool, vec![parent.unwrap()]).await?;
+    for tag in tags {
+        if tag.name == "series" {
+            is_series = true;
+            break;
+        }
     }
+
+    if limit == None || offset == None {
+        items = find_by_column!(pool, "parent", parent)?;
+    } else {
+        if is_series {
+            items = find_by_column!(pool, "parent", parent, limit, offset, "name ASC")?;
+        }
+        else {
+            items = find_by_column!(pool, "parent", parent, limit, offset, "created_at DESC")?;
+        }
+    }
+
+    let count = sqlx::query!("SELECT COUNT(*) as count FROM item WHERE parent = ?", parent).fetch_one(pool).await?;
+    Ok((items, count.count as i64))
 }
 
 pub async fn find_by_tag(pool: &SqlitePool, tags: Vec<String>, limit: i64, offset: i64) -> Result<(Vec<Item>, i64), sqlx::Error> {
@@ -226,7 +244,7 @@ pub async fn delete_item(pool: &SqlitePool, id: i64, root_dir: &str) {
 
     item_tag::delete_by_item(pool, id).await;
 
-    let items = find_by_parent(pool, Some(id), None, None).await.unwrap_or(vec![]);
+    let (items, count) = find_by_parent(pool, Some(id), None, None).await.unwrap_or_default();
     for item in items {
         delete_item(pool, item.id, root_dir).await;
     }
