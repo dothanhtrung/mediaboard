@@ -850,6 +850,18 @@ select {
   width: 15rem;
 }
 
+.w-0 {
+  width: 0px;
+}
+
+.w-16 {
+  width: 4rem;
+}
+
+.w-1\/6 {
+  width: 16.666667%;
+}
+
 .flex-shrink-0 {
   flex-shrink: 0;
 }
@@ -1216,6 +1228,26 @@ select {
 }
 
 @media (min-width: 1280px) {
+  .xl\:absolute {
+    position: absolute;
+  }
+
+  .xl\:ml-60 {
+    margin-left: 15rem;
+  }
+
+  .xl\:block {
+    display: block;
+  }
+
+  .xl\:h-full {
+    height: 100%;
+  }
+
+  .xl\:w-60 {
+    width: 15rem;
+  }
+
   .xl\:grid-cols-3 {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
