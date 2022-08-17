@@ -22,7 +22,7 @@
         {% include "include/paging.html" %}
 
 
-        <div {% if view != "series" %}class="grid grid-cols-5 gap-2" {% else %} class="grid grid-cols-none gap-2" {% endif %}>
+        <div {% if view != "series" %}class="grid lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5 gap-2" {% else %} class="grid grid-cols-none gap-2" {% endif %}>
 
             {% for item in items %}
             {% if item.file_type != "text" %}
