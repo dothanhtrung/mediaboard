@@ -8,6 +8,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use actix_files::Files;
 use actix_multipart::Multipart;
 use actix_web::{App, error, get, HttpResponse, HttpServer, post, Responder, web};
+use actix_web::web::Data;
 use async_std::prelude::*;
 use clap::Parser;
 use configparser::ini::Ini;
@@ -74,6 +75,12 @@ struct Pages {
     total: i64,
 }
 
+macro_rules! redirect {
+    ($url: expr) => {
+        HttpResponse::Found().append_header(("Location", $url)).finish()
+    }
+}
+
 fn guess_file_type(file_name: &str) -> &str {
     let parts: Vec<&str> = file_name.split(".").collect();
     match parts.last() {
@@ -96,7 +103,7 @@ fn create_thumbnail(root_dir: &str, thumbnail_dir: &str, file_path: &str, file_t
         let thumb_file_parrent = thumb_file.parent().unwrap();
         if !thumb_file_parrent.exists() {
             if let Err(_) = create_dir_all(&thumb_file_parrent) {
-                HttpResponse::Found().header("Location", "/").finish();
+                redirect!("/");
             };
         }
 
@@ -276,16 +283,16 @@ async fn item_update(data: web::Data<AppState>, postdata: web::Form<PostData>) -
                 }
             }
         }
-        return HttpResponse::Found().header("Location", format!("/?id={}", id)).finish();
+        return redirect!(format!("/?id={}", id));
     }
 
-    HttpResponse::Found().header("Location", "/").finish()
+    redirect!("/")
 }
 
 #[get("/delete/{id}")]
 async fn delete(data: web::Data<AppState>, id: web::Path<i64>) -> impl Responder {
     item::delete_item(&data.pool, id.into_inner(), data.root_dir.to_str().unwrap()).await;
-    HttpResponse::Found().header("Location", "/").finish()
+    redirect!("/")
 }
 
 #[get("/admin/")]
@@ -325,7 +332,7 @@ async fn tag_update(data: web::Data<AppState>, tagdata: web::Form<TagData>) -> i
     if let Ok(tag) = tag::find_by_name(&data.pool, name).await {
         if tag.id != id {
             eprintln!("Tag with name {} already exists", name);
-            return HttpResponse::Found().header("Location", format!("/admin/tag/{}", name)).finish();
+            return redirect!(format!("/admin/tag/{}", name));
         }
     }
 
@@ -335,13 +342,13 @@ async fn tag_update(data: web::Data<AppState>, tagdata: web::Form<TagData>) -> i
     }
 
     tag::update_tag(&data.pool, id, &name, deps).await;
-    return HttpResponse::Found().header("Location", format!("/admin/tag/{}", name)).finish();
+    redirect!(format!("/admin/tag/{}", name))
 }
 
 #[get("/delete/tag/{id}")]
 async fn tag_delete(data: web::Data<AppState>, id: web::Path<i64>) -> impl Responder {
     tag::delete_tag(&data.pool, id.into_inner()).await;
-    HttpResponse::Found().header("Location", "/admin/tags/").finish()
+    redirect!("/admin/tags/")
 }
 
 #[get("/admin/reload/")]
@@ -425,7 +432,7 @@ async fn reload(data: web::Data<AppState>) -> impl Responder {
         }
     }
 
-    HttpResponse::Found().header("Location", "/admin/").finish()
+    redirect!("/admin/")
 }
 
 #[get("/upload/")]
@@ -457,7 +464,7 @@ async fn upload_item(data: web::Data<AppState>, mut payload: Multipart) -> impl 
     let tmp_dir_path = Path::new(&data.root_dir).join("tmp");
     if !tmp_dir_path.exists() {
         if let Err(_) = create_dir_all(&tmp_dir_path) {
-            HttpResponse::Found().header("Location", "/").finish();
+            return redirect!("/");
         };
     }
 
@@ -497,11 +504,11 @@ async fn upload_item(data: web::Data<AppState>, mut payload: Multipart) -> impl 
         let new_file_name = format!("{}.{}", md5sum, ext);
         let new_file_path = tmp_dir_path.join(&new_file_name);
         if let Ok(_) = rename(&file_path, &new_file_path) {
-            return HttpResponse::Found().header("Location", format!("/upload/?file_name={}&real_file_name={}&md5={}", file_name, new_file_name, md5sum)).finish();
+            return redirect!(format!("/upload/?file_name={}&real_file_name={}&md5={}", file_name, new_file_name, md5sum));
         }
     }
 
-    HttpResponse::Found().header("Location", "/").finish()
+    redirect!("/")
 }
 
 #[post("/post_upload/")]
@@ -540,12 +547,12 @@ async fn post_upload(data: web::Data<AppState>, form: web::Form<PostData>) -> im
                 create_thumbnail(data.root_dir.to_str().unwrap(), data.thumbnail_dir.to_str().unwrap(),
                                  dest_file.to_str().unwrap(), &item.file_type, Vec::new(),
                                  false);
-                return HttpResponse::Found().header("Location", format!("/?id={}", id)).finish();
+                return redirect!(format!("/?id={}", id));
             }
         }
     }
 
-    HttpResponse::Found().header("Location", "/upload/").finish()
+    redirect!("/upload/")
 }
 
 #[actix_web::main]
@@ -566,13 +573,13 @@ async fn main() -> std::io::Result<()> {
         let tera = Tera::new(concat!(env!("CARGO_MANIFEST_DIR"), "/res/html/**/*")).unwrap();
 
         App::new()
-            .data(tera)
-            .data(AppState {
+            .app_data(Data::new(tera))
+            .app_data(Data::new(AppState {
                 pool: pool.clone(),
                 ipp: ipp as i64,
                 root_dir: root_dir.clone(),
                 thumbnail_dir: thumbnail_dir.clone(),
-            })
+            }))
             .service(index)
             .service(admin)
             .service(manage_tags)
