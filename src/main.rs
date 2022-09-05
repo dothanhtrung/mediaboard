@@ -199,7 +199,7 @@ async fn index(tmpl: web::Data<tera::Tera>, data: web::Data<AppState>, query: we
     } else {
         // tags that will be searched for
         let searching_tags_str = query.tags.as_deref().unwrap_or_default();
-        let searching_tags: Vec<String> = searching_tags_str.split_whitespace().map(str::to_string).collect();
+        let searching_tags: Vec<String> = searching_tags_str.split_whitespace().map(str::to_lowercase).collect();
 
         if searching_tags.len() > 0 {
             old_query.push(format!("tag={}", searching_tags_str));
