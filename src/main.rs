@@ -133,6 +133,7 @@ fn create_thumbnail(root_dir: &str, thumbnail_dir: &str, file_path: &str, file_t
 async fn index(tmpl: web::Data<tera::Tera>, data: web::Data<AppState>, query: web::Query<QueryInfo>) -> impl Responder {
     // context to pass data to html template
     let mut ctx = tera::Context::new();
+    ctx.insert("listview", &false);
 
     // query to pass to next URL
     let mut old_query = Vec::new();
@@ -182,6 +183,9 @@ async fn index(tmpl: web::Data<tera::Tera>, data: web::Data<AppState>, query: we
                 page_tags = tag::find_by_items(&data.pool, vec![id]).await.unwrap_or_default();
                 ctx.insert("item", &item);
                 ctx.insert("page_tags", &page_tags);
+
+                let listview = page_tags.iter().map(|t| t.name.clone()).collect::<Vec<String>>().contains(&"series".to_string());
+                ctx.insert("listview", &listview);
 
                 if item.file_type == "folder" {
                     (items, count) = item::find_by_parent(&data.pool, Some(id), Some(data.ipp), Some(offset)).await.unwrap_or_default();

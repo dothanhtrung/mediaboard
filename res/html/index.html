@@ -22,14 +22,14 @@
         {% include "include/paging.html" %}
 
 
-        <div {% if view != "series" %}class="grid lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5 gap-2" {% else %} class="grid grid-cols-none gap-2" {% endif %}>
+        <div {% if not listview %}class="grid lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5 gap-2" {% else %} class="grid grid-cols-none gap-2" {% endif %}>
 
             {% for item in items %}
             {% if item.file_type != "text" %}
             <div class="" id="dir_{{loop.index}}" tabindex="{{loop.index}}">
                 <a href="/?id={{item.id}}">
                     {% if item.file_type != "folder" %}
-                        {% if view == "series" or raw == 1 %}
+                        {% if listview or raw == 1 %}
                             {% if item.file_type == "image" %}
                                 <img class="rounded rounded-lg border" src="/img/{{item.path}}" width="100%">
                             {% else %}
