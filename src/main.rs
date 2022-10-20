@@ -202,7 +202,7 @@ async fn index(tmpl: web::Data<tera::Tera>, data: web::Data<AppState>, query: we
         let searching_tags: Vec<String> = searching_tags_str.split_whitespace().map(str::to_lowercase).collect();
 
         if searching_tags.len() > 0 {
-            old_query.push(format!("tag={}", searching_tags_str));
+            old_query.push(format!("tags={}", searching_tags_str));
             (items, count) = item::find_by_tag(&data.pool, searching_tags, data.ipp, offset).await.unwrap_or_default();
         } else {
             // Find all items that not in a series

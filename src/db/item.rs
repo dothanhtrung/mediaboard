@@ -184,14 +184,13 @@ pub async fn find_by_tag(pool: &SqlitePool, tags: Vec<String>, limit: i64, offse
     GROUP BY item.id
     ORDER BY item.created_at DESC LIMIT ? OFFSET ?"#
         ,tags ,limit, offset).fetch_all(pool).await?;
-    let count = sqlx::query!(r#"SELECT COUNT(*) as count
+    let count = sqlx::query!(r#"SELECT COUNT(DISTINCT item.id) as count
     FROM item LEFT JOIN item_tag ON item_tag.item = item.id
               LEFT JOIN tag ON item_tag.tag = tag.id
-    WHERE tag.name IN (?)
-    GROUP BY item.id"#
+    WHERE tag.name IN (?)"#
         ,tags).fetch_one(pool).await?;
 
-    Ok((items, count.count))
+    Ok((items, count.count.into()))
 }
 
 pub async fn find_not_in_series(pool: &SqlitePool, limit: i64, offset: i64) -> Result<(Vec<Item>, i64), sqlx::Error> {
@@ -202,7 +201,7 @@ pub async fn find_not_in_series(pool: &SqlitePool, limit: i64, offset: i64) -> R
             FROM item WHERE parent NOT IN (
                 SELECT item.id FROM item LEFT JOIN item_tag ON item_tag.item = item.id
                 LEFT JOIN tag ON item_tag.tag = tag.id
-                WHERE tag.name == "series")
+                WHERE tag.name == "series") OR parent is null
             ORDER BY created_at DESC LIMIT ? OFFSET ?"#
         ,limit, offset).fetch_all(pool).await?;
 
@@ -211,7 +210,7 @@ pub async fn find_not_in_series(pool: &SqlitePool, limit: i64, offset: i64) -> R
                 SELECT item.id FROM item LEFT JOIN item_tag ON item_tag.item = item.id
                 LEFT JOIN tag ON item_tag.tag = tag.id
                 WHERE tag.name == "series"
-            )"#
+            ) OR parent is null "#
         ).fetch_one(pool).await?;
 
     Ok((items, count.count as i64))
