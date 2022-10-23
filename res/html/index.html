@@ -45,6 +45,9 @@
                     {% endif %}
                     <p class="">{{item.name}}</p>
                 </a>
+                <a href="/delete/{{item.id}}" onclick="return confirm('Delete?')"
+                   class="bg-red-500 hover:bg-red-700 text-white font-bold py-1 px-2 rounded focus:outline-none focus:shadow-outline">
+                    X</a>
             </div>
             {% endif %}
             {% endfor %}
