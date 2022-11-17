@@ -4,8 +4,8 @@ use std::collections::HashMap;
 
 use async_recursion::async_recursion;
 use serde::Serialize;
-use sqlx::{Error, SqlitePool};
 use sqlx::sqlite::SqliteQueryResult;
+use sqlx::{Error, SqlitePool};
 
 #[derive(Serialize)]
 pub struct Tag {
@@ -17,24 +17,33 @@ pub struct Tag {
 
 macro_rules! insert {
     ($pool: expr, $name: expr) => {
-        sqlx::query!(r#"INSERT INTO tag (name) VALUES (?)"#, $name).execute($pool).await?.last_insert_rowid()
-    }
+        sqlx::query!(r#"INSERT INTO tag (name) VALUES (?)"#, $name)
+            .execute($pool)
+            .await?
+            .last_insert_rowid()
+    };
 }
 
 macro_rules! find_one_by_column {
     ($col: literal, $val: expr, $pool: expr) => {
-        sqlx::query_as!(Tag, "SELECT * FROM tag WHERE " + $col + " = ?", $val).fetch_one($pool).await
-    }
+        sqlx::query_as!(Tag, "SELECT * FROM tag WHERE " + $col + " = ?", $val)
+            .fetch_one($pool)
+            .await
+    };
 }
 
 macro_rules! delete_by_column {
     ($pool: expr, $col: literal, $val: expr) => {
-        sqlx::query!("DELETE FROM tag WHERE " + $col + " = ?", $val).execute($pool).await
-    }
+        sqlx::query!("DELETE FROM tag WHERE " + $col + " = ?", $val)
+            .execute($pool)
+            .await
+    };
 }
 
 pub async fn find_all(pool: &SqlitePool) -> Result<Vec<Tag>, sqlx::Error> {
-    sqlx::query_as!(Tag, r#"SELECT * FROM tag ORDER BY name ASC"#).fetch_all(pool).await
+    sqlx::query_as!(Tag, r#"SELECT * FROM tag ORDER BY name ASC"#)
+        .fetch_all(pool)
+        .await
 }
 
 pub async fn find_by_id(pool: &SqlitePool, id: i64) -> Result<Tag, sqlx::Error> {
@@ -76,43 +85,29 @@ async fn delete_by_id(pool: &SqlitePool, id: i64) -> Result<SqliteQueryResult, s
     delete_by_column!(pool, "id", id)
 }
 
-async fn update_name(pool: &SqlitePool, name: &str, id: i64) -> Result<SqliteQueryResult, sqlx::Error> {
-    sqlx::query!(r#"UPDATE tag SET name=? WHERE id = ?"#, name, id).execute(pool).await
+async fn update_name(
+    pool: &SqlitePool,
+    name: &str,
+    id: i64,
+) -> Result<SqliteQueryResult, sqlx::Error> {
+    sqlx::query!(r#"UPDATE tag SET name=? WHERE id = ?"#, name, id)
+        .execute(pool)
+        .await
 }
 
-#[async_recursion]
-async fn update_item_tag(pool: &SqlitePool, item_id: i64, tag_id: i64) {
-    if let Ok(_) = item_tag::insert(pool, item_id, tag_id).await {
-        let deps = find_depend_tags(pool, tag_id).await.unwrap_or_default();
-        for dep in deps {
-            update_item_tag(pool, item_id, dep.id).await;
-        }
-    }
-}
-
-pub async fn update_item_tags(pool: &SqlitePool, item_id: i64, tag_names: Vec<&str>) -> Result<(), sqlx::Error> {
+pub async fn update_item_tags(
+    pool: &SqlitePool,
+    item_id: i64,
+    tag_names: Vec<&str>,
+) -> Result<(), sqlx::Error> {
     let mut tags = Vec::new();
     for tag_name in tag_names {
         if let Ok(tag) = find_or_create(pool, &tag_name.to_lowercase()).await {
             tags.push(tag.id);
         }
     }
-
-    let mut old_tags = Vec::new();
-    let item_tags = item_tag::find_by_item(pool, item_id).await.unwrap_or_default();
-    for it in item_tags {
-        if !tags.contains(&it.tag) {
-            item_tag::delete_by_id(pool, it.id).await;
-        } else {
-            old_tags.push(it.tag);
-        }
-    }
-
-    for tag in tags {
-        if !old_tags.contains(&tag) {
-            update_item_tag(pool, item_id, tag).await;
-        }
-    }
+    item_tag::delete_by_item(pool, item_id).await?;
+    item_tag::insert_many(pool, item_id, tags).await?;
 
     Ok(())
 }
@@ -155,9 +150,12 @@ pub async fn delete_tag(pool: &SqlitePool, id: i64) {
 
 pub async fn count_tags(pool: &SqlitePool) -> Result<HashMap<String, i32>, sqlx::Error> {
     let mut ret: HashMap<String, i32> = HashMap::new();
-    let recs = sqlx::query!(r#"SELECT tag.name as name, COUNT(item_tag.tag) as count
-    FROM tag LEFT JOIN item_tag ON tag.id = item_tag.tag GROUP BY tag.name ORDER BY count DESC"#)
-        .fetch_all(pool).await?;
+    let recs = sqlx::query!(
+        r#"SELECT tag.name as name, COUNT(item_tag.tag) as count
+    FROM tag LEFT JOIN item_tag ON tag.id = item_tag.tag GROUP BY tag.name ORDER BY count DESC"#
+    )
+    .fetch_all(pool)
+    .await?;
     for rec in recs {
         ret.insert(rec.name, rec.count.unwrap_or(0));
     }
