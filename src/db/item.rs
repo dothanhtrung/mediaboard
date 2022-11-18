@@ -224,7 +224,7 @@ pub async fn delete_by_parent(pool: &SqlitePool, parent: Option<i64>) {
     delete_by_column!("parent", parent, pool);
 }
 
-async fn delete_local_file(file_path: &str) -> Result<(), std::io::Error> {
+pub async fn delete_local_file(file_path: &str) -> Result<(), std::io::Error> {
     let path = Path::new(&file_path);
     if path.is_dir() {
         remove_dir_all(path)
