@@ -80,7 +80,9 @@ pub async fn find_missing_dep_tags(
     let mut deps: Vec<i64> = Vec::new();
     while let Some(row) = rows.try_next().await? {
         let dep: i64 = row.try_get(0)?;
-        deps.push(dep);
+        if !deps.contains(&dep) {
+            deps.push(dep);
+        }
     }
     Ok(deps)
 }
