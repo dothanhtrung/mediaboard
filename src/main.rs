@@ -661,6 +661,11 @@ async fn upload_item(data: web::Data<AppState>, mut payload: Multipart) -> impl 
 
         md5sum = format!("{:x}", md5_context.finalize());
 
+        if let Ok(item) = item::find_by_md5(&data.pool, &md5sum).await {
+            println!("File existed: {}", item.path);
+            redirect!("/upload/");
+        }
+
         let new_file_name = format!("{}.{}", md5sum, ext);
         let new_file_path = tmp_dir_path.join(&new_file_name);
         if let Ok(_) = rename(&file_path, &new_file_path) {
