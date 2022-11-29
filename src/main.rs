@@ -1,4 +1,3 @@
-
 mod db;
 mod route;
 
@@ -11,9 +10,6 @@ use dotenv::dotenv;
 use sqlx::sqlite::SqlitePoolOptions;
 use std::path::Path;
 use tera::Tera;
-
-use route::*;
-
 
 #[derive(Parser)]
 struct Cli {
@@ -48,24 +44,24 @@ async fn main() -> std::io::Result<()> {
 
         App::new()
             .app_data(Data::new(tera))
-            .app_data(Data::new(AppState::new(
+            .app_data(Data::new(route::AppState::new(
                 pool.clone(),
                 ipp as i64,
                 root_dir.clone(),
                 thumbnail_dir.clone(),
             )))
-            .service(index)
-            .service(admin)
-            .service(manage_tags)
-            .service(manage_tag)
-            .service(tag_update)
-            .service(tag_delete)
-            .service(reload)
-            .service(item_update)
-            .service(delete)
-            .service(upload)
-            .service(upload_item)
-            .service(post_upload)
+            .service(route::index::index)
+            .service(route::admin::admin)
+            .service(route::admin::manage_tags)
+            .service(route::admin::manage_tag)
+            .service(route::admin::tag_update)
+            .service(route::admin::tag_delete)
+            .service(route::admin::reload)
+            .service(route::post::item_update)
+            .service(route::post::delete)
+            .service(route::upload::upload)
+            .service(route::upload::upload_item)
+            .service(route::upload::post_upload)
             .service(Files::new("/img", root_dir.clone()))
             .service(Files::new(
                 "/css",
