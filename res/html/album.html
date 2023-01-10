@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Media Board - New Album</title>
+
+    <link rel="stylesheet" type="text/css" href="/css/tailwind_gen.css">
+</head>
+<body>
+
+{% include "include/header.html" %}
+
+<form action="/album/new/" method="post">
+    <label>Name
+    <input type="text" name="name"></label><br>
+    <div class="">
+        <label class="block text-gray-700 text-sm font-bold" for="parent">
+            Parent
+        </label>
+        <input type="text" id="parent" name="parent" list="parent_list">
+        <datalist id="parent_list">
+            {% for d in folders %}
+            <option value="{{d.id}}">{{d.name}} ({{d.id}})</option>
+            {% endfor %}
+        </datalist>
+    </div>
+    <input type="submit" value="Save"
+           class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+    >
+</form>
+</body>
+</html>

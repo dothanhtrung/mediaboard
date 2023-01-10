@@ -3,7 +3,7 @@ mod route;
 
 use actix_files::Files;
 use actix_web::web::Data;
-use actix_web::{error, get, post, web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{App, HttpServer};
 use clap::Parser;
 use configparser::ini::Ini;
 use dotenv::dotenv;
@@ -62,6 +62,8 @@ async fn main() -> std::io::Result<()> {
             .service(route::upload::upload)
             .service(route::upload::upload_item)
             .service(route::upload::post_upload)
+            .service(route::album::get_new)
+            .service(route::album::post_new)
             .service(Files::new("/img", root_dir.clone()))
             .service(Files::new(
                 "/css",

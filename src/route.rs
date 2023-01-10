@@ -1,23 +1,3 @@
-// use std::collections::HashMap;
-// use std::fs::{create_dir_all, read_dir, rename, File};
-// use std::io;
-// use std::io::{BufRead, BufReader, Read};
-// use std::path::{Path, PathBuf};
-// use std::process::Command;
-// use std::time::{SystemTime, UNIX_EPOCH};
-//
-// use actix_multipart::Multipart;
-// use actix_web::web::Data;
-// use actix_web::{error, get, post, web, App, HttpResponse, HttpServer, Responder};
-// use async_std::prelude::*;
-// use futures::{StreamExt, TryStreamExt};
-// use md5::{Digest, Md5};
-// use serde::{Deserialize, Serialize};
-// use serde_json::to_string;
-// use sqlx::SqlitePool;
-// use tera::Tera;
-// use walkdir::WalkDir;
-
 use serde::Deserialize;
 use sqlx::SqlitePool;
 use std::fs::{create_dir_all, read_dir};
@@ -25,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 pub mod admin;
-pub mod folder;
+pub mod album;
 pub mod index;
 pub mod post;
 pub mod upload;
