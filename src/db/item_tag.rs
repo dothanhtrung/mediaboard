@@ -72,7 +72,7 @@ pub async fn find_missing_dep_tags(
     let query = &format!(
         "SELECT tag_tag.dep as dep FROM tag_tag
     LEFT JOIN item_tag ON tag_tag.dep = item_tag.tag
-    WHERE tag_tag.tag IN ({}) AND (item_tag.item IS NULL OR item_tag.item != ?)",
+    WHERE tag_tag.tag IN ({}) AND item_tag.item IS NULL",
         stags
     );
     let mut rows = sqlx::query(query).bind(item).fetch(pool);
